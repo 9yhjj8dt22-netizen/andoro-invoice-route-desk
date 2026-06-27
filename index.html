@@ -89,13 +89,13 @@
                 <button class="ghost-button" id="clearScanQueue" type="button">Clear scans</button>
               </div>
               <div class="scan-dropzone" id="scanDropzone">
-                <input id="invoicePhotos" accept="image/*" capture="environment" multiple type="file">
-                <strong>Take pictures or choose invoice photos</strong>
-                <span>Each image is read on this computer, then turned into editable invoice details.</span>
+                <input id="invoicePhotos" accept="image/*,application/pdf" multiple type="file">
+                <strong>Choose saved invoices or photos</strong>
+                <span>Pick images or PDF invoices from your phone, Files, Downloads, or photo library.</span>
               </div>
               <div class="scan-actions">
-                <button class="primary-button" id="processPhotos" type="button">Read invoice photos</button>
-                <span id="scanStatus">No photos selected</span>
+                <button class="primary-button" id="processPhotos" type="button">Read invoice files</button>
+                <span id="scanStatus">No files selected</span>
               </div>
               <div class="photo-grid" id="photoGrid"></div>
             </section>
@@ -299,6 +299,7 @@
       </div>
     </template>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="app.js"></script>
     <script>

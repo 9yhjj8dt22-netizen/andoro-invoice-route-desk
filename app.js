@@ -698,47 +698,90 @@ function resetData() {
 
 function handlePhotoSelection(event) {
   selectedFiles = [...event.target.files];
-  els.scanStatus.textContent = `${selectedFiles.length} photo${selectedFiles.length === 1 ? "" : "s"} selected`;
+  els.scanStatus.textContent = `${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"} selected`;
   els.photoGrid.replaceChildren();
   selectedFiles.forEach((file) => {
     const card = document.createElement("div");
     card.className = "photo-card";
-    const img = document.createElement("img");
-    img.alt = file.name;
-    img.src = URL.createObjectURL(file);
+    if (file.type === "application/pdf") {
+      const badge = document.createElement("div");
+      badge.className = "file-preview";
+      badge.textContent = "PDF";
+      card.append(badge);
+    } else {
+      const img = document.createElement("img");
+      img.alt = file.name;
+      img.src = URL.createObjectURL(file);
+      card.append(img);
+    }
     const label = document.createElement("span");
     label.textContent = file.name;
-    card.append(img, label);
+    card.append(label);
     els.photoGrid.append(card);
   });
 }
 
 async function processPhotos() {
   if (!selectedFiles.length) {
-    alert("Choose or take invoice photos first.");
+    alert("Choose saved invoice files or photos first.");
     return;
   }
   if (!window.Tesseract) {
     alert("The photo reader could not load. Check your internet connection and try again.");
     return;
   }
+  if (selectedFiles.some((file) => file.type === "application/pdf") && !window.pdfjsLib) {
+    alert("The PDF reader could not load. Check your internet connection and try again.");
+    return;
+  }
   els.processPhotos.disabled = true;
   state.scans = [];
   for (const [index, file] of selectedFiles.entries()) {
     els.scanStatus.textContent = `Reading ${index + 1} of ${selectedFiles.length}: ${file.name}`;
-    const result = await Tesseract.recognize(file, "eng", {
-      logger: (message) => {
-        if (message.status === "recognizing text") {
-          els.scanStatus.textContent = `Reading ${file.name}: ${Math.round(message.progress * 100)}%`;
-        }
-      }
-    });
-    state.scans.push(parseInvoiceText(result.data.text, file.name));
+    if (file.type === "application/pdf") {
+      const pages = await readPdfInvoice(file);
+      pages.forEach((page) => state.scans.push(parseInvoiceText(page.text, page.fileName)));
+    } else {
+      const text = await readImageInvoice(file, file.name);
+      state.scans.push(parseInvoiceText(text, file.name));
+    }
     saveState();
     renderScans();
   }
   els.processPhotos.disabled = false;
-  els.scanStatus.textContent = `Finished reading ${selectedFiles.length} photo${selectedFiles.length === 1 ? "" : "s"}`;
+  els.scanStatus.textContent = `Finished reading ${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"}`;
+}
+
+async function readImageInvoice(imageSource, label) {
+  const result = await Tesseract.recognize(imageSource, "eng", {
+    logger: (message) => {
+      if (message.status === "recognizing text") {
+        els.scanStatus.textContent = `Reading ${label}: ${Math.round(message.progress * 100)}%`;
+      }
+    }
+  });
+  return result.data.text;
+}
+
+async function readPdfInvoice(file) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const data = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data }).promise;
+  const pages = [];
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    els.scanStatus.textContent = `Reading ${file.name}: page ${pageNumber} of ${pdf.numPages}`;
+    const page = await pdf.getPage(pageNumber);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: context, viewport }).promise;
+    const image = canvas.toDataURL("image/png");
+    const text = await readImageInvoice(image, `${file.name} page ${pageNumber}`);
+    pages.push({ text, fileName: `${file.name} page ${pageNumber}` });
+  }
+  return pages;
 }
 
 function clearScans() {

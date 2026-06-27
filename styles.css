@@ -502,6 +502,17 @@ th {
   object-fit: cover;
 }
 
+.file-preview {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  background: #f7e7e6;
+  color: var(--red);
+  font-size: 1.8rem;
+  font-weight: 900;
+}
+
 .photo-card span {
   display: block;
   padding: 8px;
