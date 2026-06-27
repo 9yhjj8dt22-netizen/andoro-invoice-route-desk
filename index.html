@@ -89,9 +89,18 @@
                 <button class="ghost-button" id="clearScanQueue" type="button">Clear scans</button>
               </div>
               <div class="scan-dropzone" id="scanDropzone">
-                <input id="invoicePhotos" accept="image/*,application/pdf" multiple type="file">
                 <strong>Choose saved invoices or photos</strong>
                 <span>Pick images or PDF invoices from your phone, Files, Downloads, or photo library.</span>
+                <div class="picker-row">
+                  <label class="file-button">
+                    Choose saved files
+                    <input id="invoiceFiles" accept="image/*,application/pdf" multiple type="file">
+                  </label>
+                  <label class="file-button secondary-file-button">
+                    Take photo
+                    <input id="invoiceCamera" accept="image/*" capture="environment" multiple type="file">
+                  </label>
+                </div>
               </div>
               <div class="scan-actions">
                 <button class="primary-button" id="processPhotos" type="button">Read invoice files</button>

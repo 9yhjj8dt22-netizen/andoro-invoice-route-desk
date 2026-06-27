@@ -101,7 +101,8 @@ const els = {
   exportData: document.querySelector("#exportData"),
   importData: document.querySelector("#importData"),
   resetData: document.querySelector("#resetData"),
-  invoicePhotos: document.querySelector("#invoicePhotos"),
+  invoiceFiles: document.querySelector("#invoiceFiles"),
+  invoiceCamera: document.querySelector("#invoiceCamera"),
   processPhotos: document.querySelector("#processPhotos"),
   clearScanQueue: document.querySelector("#clearScanQueue"),
   scanStatus: document.querySelector("#scanStatus"),
@@ -539,7 +540,8 @@ function attachEvents() {
   els.exportData.addEventListener("click", exportData);
   els.importData.addEventListener("change", importData);
   els.resetData.addEventListener("click", resetData);
-  els.invoicePhotos.addEventListener("change", handlePhotoSelection);
+  els.invoiceFiles.addEventListener("change", handlePhotoSelection);
+  els.invoiceCamera.addEventListener("change", handlePhotoSelection);
   els.processPhotos.addEventListener("click", processPhotos);
   els.clearScanQueue.addEventListener("click", clearScans);
   els.saveScannedInvoices.addEventListener("click", saveScannedInvoices);
@@ -787,7 +789,8 @@ async function readPdfInvoice(file) {
 function clearScans() {
   selectedFiles = [];
   state.scans = [];
-  els.invoicePhotos.value = "";
+  els.invoiceFiles.value = "";
+  els.invoiceCamera.value = "";
   els.photoGrid.replaceChildren();
   els.scanStatus.textContent = "No photos selected";
   saveState();
