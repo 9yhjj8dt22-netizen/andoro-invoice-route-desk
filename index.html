@@ -49,7 +49,7 @@
               <strong id="openInvoiceCount">0</strong>
             </article>
             <article class="metric">
-              <span>Overdue</span>
+              <span>Paid invoices</span>
               <strong id="overdueCount">0</strong>
             </article>
             <article class="metric">
@@ -111,7 +111,7 @@
 
             <section class="work-panel">
               <div class="panel-heading">
-                <h2>Extracted Categories</h2>
+                <h2>Extracted Invoice Fields</h2>
                 <button class="primary-button" id="saveScannedInvoices" type="button">Save accepted invoices</button>
               </div>
               <div class="scan-summary" id="scanSummary"></div>
@@ -133,11 +133,7 @@
                 <input id="customerName" required placeholder="Customer name">
               </label>
               <label>
-                Category
-                <input id="invoiceCategory" placeholder="Materials, labor, service, delivery">
-              </label>
-              <label>
-                Service address
+                Bill to address
                 <input id="serviceAddress" placeholder="Street, city, state">
               </label>
               <div class="field-row">
@@ -152,26 +148,66 @@
               </div>
               <div class="field-row">
                 <label>
-                  Issue date
+                  Invoice date
                   <input id="issueDate" required type="date">
                 </label>
                 <label>
-                  Due date
-                  <input id="dueDate" required type="date">
+                  Terms
+                  <input id="invoiceTerms" placeholder="Net 10">
+                </label>
+              </div>
+              <div class="field-row">
+                <label>
+                  P.O. No.
+                  <input id="poNumber" placeholder="PO number">
+                </label>
+                <label>
+                  Rep
+                  <input id="invoiceRep" placeholder="LC">
                 </label>
               </div>
               <label>
-                Status
-                <select id="invoiceStatus">
-                  <option value="open">Open</option>
-                  <option value="paid">Paid</option>
-                  <option value="overdue">Overdue</option>
-                </select>
+                Special instructions
+                <textarea id="specialInstructions" rows="3" placeholder="Main phone, alternate phone, D/T, order notes"></textarea>
+              </label>
+              <div class="field-row">
+                <label>
+                  Main phone
+                  <input id="mainPhone" placeholder="(636) 225-2627">
+                </label>
+                <label>
+                  Alt phone
+                  <input id="altPhone" placeholder="636-375-6165">
+                </label>
+              </div>
+              <label>
+                D/T
+                <input id="invoiceDt" placeholder="Delivery time or note">
               </label>
               <label>
-                Notes
-                <textarea id="invoiceNotes" rows="3" placeholder="PO number, job details, payment notes"></textarea>
+                Line items
+                <textarea id="lineItemsText" rows="5" placeholder="Description | Qty | U/M | Rate | Amount"></textarea>
               </label>
+              <div class="field-row">
+                <label>
+                  Customer total balance
+                  <input id="customerTotalBalance" min="0" step="0.01" type="number" placeholder="0.00">
+                </label>
+                <label>
+                  Total
+                  <input id="invoiceTotal" min="0" step="0.01" type="number" placeholder="0.00">
+                </label>
+              </div>
+              <div class="field-row">
+                <label>
+                  Payments/Credits
+                  <input id="paymentsCredits" min="0" step="0.01" type="number" placeholder="0.00">
+                </label>
+                <label>
+                  Balance due
+                  <input id="balanceDue" min="0" step="0.01" type="number" placeholder="0.00">
+                </label>
+              </div>
               <button class="primary-button" type="submit">Save invoice</button>
             </form>
 
@@ -183,7 +219,6 @@
                   <select id="invoiceFilter" aria-label="Filter invoices">
                     <option value="all">All</option>
                     <option value="open">Open</option>
-                    <option value="overdue">Overdue</option>
                     <option value="paid">Paid</option>
                   </select>
                 </div>
@@ -193,10 +228,9 @@
                   <thead>
                     <tr>
                       <th>Customer</th>
-                      <th>Category</th>
                       <th>Invoice</th>
-                      <th>Due</th>
-                      <th>Status</th>
+                      <th>Date</th>
+                      <th>Terms</th>
                       <th class="align-right">Amount</th>
                       <th></th>
                     </tr>

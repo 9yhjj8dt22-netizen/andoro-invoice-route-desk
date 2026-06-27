@@ -7,26 +7,36 @@ const sampleData = {
     {
       id: crypto.randomUUID(),
       customer: "North Lake Supply",
-      category: "Materials",
       address: "100 N LaSalle St, Chicago, IL",
       number: "INV-1001",
       amount: 842.5,
-      issueDate: todayOffset(-8),
-      dueDate: todayOffset(7),
-      status: "open",
-      notes: "Morning delivery"
+      invoiceDate: todayOffset(-8),
+      terms: "Net 10",
+      poNumber: "",
+      rep: "LC",
+      specialInstructions: "Morning delivery",
+      items: [{ description: "Delivery order", qty: 1, unit: "CS", rate: 842.5, amount: 842.5 }],
+      customerTotalBalance: 0,
+      total: 842.5,
+      paymentsCredits: 0,
+      balanceDue: 842.5
     },
     {
       id: crypto.randomUUID(),
       customer: "Riverbend Builders",
-      category: "Labor",
       address: "233 S Wacker Dr, Chicago, IL",
       number: "INV-1002",
       amount: 1260,
-      issueDate: todayOffset(-28),
-      dueDate: todayOffset(-3),
-      status: "overdue",
-      notes: "Call before arrival"
+      invoiceDate: todayOffset(-28),
+      terms: "Net 10",
+      poNumber: "",
+      rep: "LC",
+      specialInstructions: "Call before arrival",
+      items: [{ description: "Delivery order", qty: 1, unit: "CS", rate: 1260, amount: 1260 }],
+      customerTotalBalance: 0,
+      total: 1260,
+      paymentsCredits: 0,
+      balanceDue: 1260
     }
   ],
   stops: [
@@ -68,14 +78,22 @@ const els = {
   invoiceId: document.querySelector("#invoiceId"),
   invoiceFormTitle: document.querySelector("#invoiceFormTitle"),
   customerName: document.querySelector("#customerName"),
-  invoiceCategory: document.querySelector("#invoiceCategory"),
   serviceAddress: document.querySelector("#serviceAddress"),
   invoiceNumber: document.querySelector("#invoiceNumber"),
   invoiceAmount: document.querySelector("#invoiceAmount"),
   issueDate: document.querySelector("#issueDate"),
-  dueDate: document.querySelector("#dueDate"),
-  invoiceStatus: document.querySelector("#invoiceStatus"),
-  invoiceNotes: document.querySelector("#invoiceNotes"),
+  invoiceTerms: document.querySelector("#invoiceTerms"),
+  poNumber: document.querySelector("#poNumber"),
+  invoiceRep: document.querySelector("#invoiceRep"),
+  specialInstructions: document.querySelector("#specialInstructions"),
+  mainPhone: document.querySelector("#mainPhone"),
+  altPhone: document.querySelector("#altPhone"),
+  invoiceDt: document.querySelector("#invoiceDt"),
+  lineItemsText: document.querySelector("#lineItemsText"),
+  customerTotalBalance: document.querySelector("#customerTotalBalance"),
+  invoiceTotal: document.querySelector("#invoiceTotal"),
+  paymentsCredits: document.querySelector("#paymentsCredits"),
+  balanceDue: document.querySelector("#balanceDue"),
   clearInvoiceForm: document.querySelector("#clearInvoiceForm"),
   invoiceSearch: document.querySelector("#invoiceSearch"),
   invoiceFilter: document.querySelector("#invoiceFilter"),
@@ -146,27 +164,34 @@ function emptyState() {
 }
 
 function statusFor(invoice) {
-  if (invoice.status === "paid") return "paid";
-  return new Date(invoice.dueDate) < startOfToday() ? "overdue" : invoice.status;
+  return invoiceBalance(invoice) > 0 ? "open" : "paid";
 }
 
-function startOfToday() {
-  const date = new Date();
-  date.setHours(0, 0, 0, 0);
-  return date;
+function invoiceDate(invoice) {
+  return invoice.invoiceDate || invoice.issueDate || todayOffset(0);
+}
+
+function invoiceBalance(invoice) {
+  const balance = Number(invoice.balanceDue ?? invoice.amount ?? invoice.total ?? 0);
+  return Number.isFinite(balance) ? balance : 0;
+}
+
+function invoiceTotal(invoice) {
+  const total = Number(invoice.total ?? invoice.amount ?? invoice.balanceDue ?? 0);
+  return Number.isFinite(total) ? total : 0;
 }
 
 function render() {
   els.todayLabel.textContent = dateFormat.format(new Date());
   const openInvoices = state.invoices.filter((invoice) => statusFor(invoice) !== "paid");
-  const overdueInvoices = state.invoices.filter((invoice) => statusFor(invoice) === "overdue");
+  const paidInvoices = state.invoices.filter((invoice) => statusFor(invoice) === "paid");
   const paidThisMonth = state.invoices
-    .filter((invoice) => invoice.status === "paid" && invoice.issueDate?.slice(0, 7) === new Date().toISOString().slice(0, 7))
-    .reduce((total, invoice) => total + Number(invoice.amount || 0), 0);
+    .filter((invoice) => statusFor(invoice) === "paid" && invoiceDate(invoice)?.slice(0, 7) === new Date().toISOString().slice(0, 7))
+    .reduce((total, invoice) => total + invoiceTotal(invoice), 0);
 
-  els.openBalance.textContent = money.format(openInvoices.reduce((total, invoice) => total + Number(invoice.amount || 0), 0));
+  els.openBalance.textContent = money.format(openInvoices.reduce((total, invoice) => total + invoiceBalance(invoice), 0));
   els.openInvoiceCount.textContent = openInvoices.length;
-  els.overdueCount.textContent = overdueInvoices.length;
+  els.overdueCount.textContent = paidInvoices.length;
   els.paidThisMonth.textContent = money.format(paidThisMonth);
   els.routeStopCount.textContent = state.stops.length;
   els.originLat.value = state.origin?.lat ?? "";
@@ -182,7 +207,7 @@ function renderAttention() {
   els.attentionList.replaceChildren();
   const items = state.invoices
     .filter((invoice) => statusFor(invoice) !== "paid")
-    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+    .sort((a, b) => new Date(invoiceDate(b)) - new Date(invoiceDate(a)))
     .slice(0, 5);
   if (!items.length) {
     els.attentionList.append(emptyState());
@@ -194,9 +219,9 @@ function renderAttention() {
     item.innerHTML = `
       <div>
         <strong>${escapeHtml(invoice.customer)}</strong>
-        <span>${escapeHtml(invoice.category || "Uncategorized")} - due ${formatDate(invoice.dueDate)}</span>
+        <span>Invoice ${escapeHtml(invoice.number || "")} - ${formatDate(invoiceDate(invoice))}</span>
       </div>
-      <strong>${money.format(Number(invoice.amount || 0))}</strong>
+      <strong>${money.format(invoiceBalance(invoice))}</strong>
     `;
     els.attentionList.append(item);
   });
@@ -206,26 +231,36 @@ function renderInvoices() {
   const term = els.invoiceSearch.value.trim().toLowerCase();
   const filter = els.invoiceFilter.value;
   const rows = state.invoices.filter((invoice) => {
-    const searchable = [invoice.customer, invoice.category, invoice.address, invoice.number, invoice.notes].join(" ").toLowerCase();
+    const searchable = [
+      invoice.customer,
+      invoice.address,
+      invoice.number,
+      invoice.terms,
+      invoice.poNumber,
+      invoice.rep,
+      invoice.specialInstructions,
+      invoice.mainPhone,
+      invoice.altPhone,
+      invoice.dt,
+      lineItemsToText(invoice.items)
+    ].join(" ").toLowerCase();
     return (!term || searchable.includes(term)) && (filter === "all" || statusFor(invoice) === filter);
   });
   els.invoiceTable.replaceChildren();
   if (!rows.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="7"><div class="empty-state"><strong>No invoices found</strong><span>Add or scan invoices to fill the ledger.</span></div></td>`;
+    tr.innerHTML = `<td colspan="6"><div class="empty-state"><strong>No invoices found</strong><span>Add or scan invoices to fill the ledger.</span></div></td>`;
     els.invoiceTable.append(tr);
     return;
   }
   rows.forEach((invoice) => {
-    const status = statusFor(invoice);
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><strong>${escapeHtml(invoice.customer)}</strong><br><span class="muted">${escapeHtml(invoice.address || "No address")}</span></td>
-      <td>${escapeHtml(invoice.category || "Uncategorized")}</td>
       <td>${escapeHtml(invoice.number)}</td>
-      <td>${formatDate(invoice.dueDate)}</td>
-      <td><span class="status-pill status-${status}">${status}</span></td>
-      <td class="align-right">${money.format(Number(invoice.amount || 0))}</td>
+      <td>${formatDate(invoiceDate(invoice))}</td>
+      <td>${escapeHtml(invoice.terms || "")}</td>
+      <td class="align-right">${money.format(invoiceBalance(invoice))}</td>
       <td><div class="row-actions">
         <button class="icon-action" data-edit-invoice="${invoice.id}" type="button">Edit</button>
         <button class="icon-action" data-delete-invoice="${invoice.id}" type="button">Delete</button>
@@ -282,11 +317,11 @@ function renderScans() {
   }
 
   const categories = state.scans.reduce((map, scan) => {
-    const category = scan.category || "Uncategorized";
-    if (!map.has(category)) map.set(category, { count: 0, total: 0 });
-    const entry = map.get(category);
+    const key = scan.terms || "No terms";
+    if (!map.has(key)) map.set(key, { count: 0, total: 0 });
+    const entry = map.get(key);
     entry.count += 1;
-    entry.total += Number(scan.amount || 0);
+    entry.total += Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0);
     return map;
   }, new Map());
 
@@ -310,16 +345,31 @@ function renderScans() {
       </header>
       <div class="field-row">
         <label>Customer<input data-scan-field="customer" data-scan-id="${scan.id}" value="${escapeAttribute(scan.customer)}"></label>
-        <label>Category<input data-scan-field="category" data-scan-id="${scan.id}" value="${escapeAttribute(scan.category)}"></label>
+        <label>Invoice #<input data-scan-field="number" data-scan-id="${scan.id}" value="${escapeAttribute(scan.number)}"></label>
       </div>
       <label>Address<input data-scan-field="address" data-scan-id="${scan.id}" value="${escapeAttribute(scan.address)}"></label>
       <div class="field-row">
-        <label>Invoice #<input data-scan-field="number" data-scan-id="${scan.id}" value="${escapeAttribute(scan.number)}"></label>
-        <label>Amount<input data-scan-field="amount" data-scan-id="${scan.id}" type="number" step="0.01" value="${Number(scan.amount || 0)}"></label>
+        <label>Invoice date<input data-scan-field="invoiceDate" data-scan-id="${scan.id}" type="date" value="${escapeAttribute(scan.invoiceDate)}"></label>
+        <label>Terms<input data-scan-field="terms" data-scan-id="${scan.id}" value="${escapeAttribute(scan.terms)}"></label>
       </div>
       <div class="field-row">
-        <label>Issue date<input data-scan-field="issueDate" data-scan-id="${scan.id}" type="date" value="${escapeAttribute(scan.issueDate)}"></label>
-        <label>Due date<input data-scan-field="dueDate" data-scan-id="${scan.id}" type="date" value="${escapeAttribute(scan.dueDate)}"></label>
+        <label>P.O. No.<input data-scan-field="poNumber" data-scan-id="${scan.id}" value="${escapeAttribute(scan.poNumber)}"></label>
+        <label>Rep<input data-scan-field="rep" data-scan-id="${scan.id}" value="${escapeAttribute(scan.rep)}"></label>
+      </div>
+      <div class="field-row">
+        <label>Main phone<input data-scan-field="mainPhone" data-scan-id="${scan.id}" value="${escapeAttribute(scan.mainPhone)}"></label>
+        <label>Alt phone<input data-scan-field="altPhone" data-scan-id="${scan.id}" value="${escapeAttribute(scan.altPhone)}"></label>
+      </div>
+      <label>D/T<input data-scan-field="dt" data-scan-id="${scan.id}" value="${escapeAttribute(scan.dt)}"></label>
+      <label>Special instructions<textarea data-scan-field="specialInstructions" data-scan-id="${scan.id}">${escapeHtml(scan.specialInstructions)}</textarea></label>
+      <label>Line items<textarea data-scan-field="itemsText" data-scan-id="${scan.id}">${escapeHtml(scan.itemsText || lineItemsToText(scan.items))}</textarea></label>
+      <div class="field-row">
+        <label>Customer total balance<input data-scan-field="customerTotalBalance" data-scan-id="${scan.id}" type="number" step="0.01" value="${Number(scan.customerTotalBalance || 0)}"></label>
+        <label>Total<input data-scan-field="total" data-scan-id="${scan.id}" type="number" step="0.01" value="${Number(scan.total || 0)}"></label>
+      </div>
+      <div class="field-row">
+        <label>Payments/Credits<input data-scan-field="paymentsCredits" data-scan-id="${scan.id}" type="number" step="0.01" value="${Number(scan.paymentsCredits || 0)}"></label>
+        <label>Balance due<input data-scan-field="balanceDue" data-scan-id="${scan.id}" type="number" step="0.01" value="${Number(scan.balanceDue || 0)}"></label>
       </div>
       <label>Recognized text<textarea data-scan-field="rawText" data-scan-id="${scan.id}">${escapeHtml(scan.rawText)}</textarea></label>
     `;
@@ -330,29 +380,109 @@ function renderScans() {
 function parseInvoiceText(rawText, fileName) {
   const text = rawText.replace(/\r/g, "\n");
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
-  const amountMatches = [...text.matchAll(/\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+\.[0-9]{2})/g)]
-    .map((match) => Number(match[1].replace(/,/g, "")))
-    .filter((value) => Number.isFinite(value));
-  const invoiceNumber = text.match(/(?:invoice|inv|bill)\s*(?:#|no\.?|number)?\s*[:\-]?\s*([A-Z0-9-]+)/i)?.[1]
-    || text.match(/\bINV[-\s]?[0-9A-Z-]+\b/i)?.[0]
-    || "";
+  const amountMatches = amountsFromText(text);
   const dateMatches = [...text.matchAll(/\b([0-1]?\d[\/\-][0-3]?\d[\/\-](?:20)?\d{2})\b/g)].map((match) => normalizeDate(match[1]));
-  const address = findAddress(lines);
-  const category = detectCategory(text);
-  const customer = findCustomer(lines, invoiceNumber);
+  const invoiceNumber = text.match(/invoice\s*#?\s*[:\-]?\s*([0-9A-Z-]{3,})/i)?.[1]
+    || findValueAfterLabel(lines, /invoice\s*#/i)
+    || invoiceNumberNearDate(lines)
+    || "";
+  const billTo = parseBillTo(lines);
+  const totals = parseTotals(text, amountMatches);
+  const items = parseLineItems(lines);
+  const terms = findValueAfterLabel(lines, /^terms$/i) || text.match(/\bNet\s*\d+\b/i)?.[0] || "";
   return {
     id: crypto.randomUUID(),
     accepted: true,
     fileName,
-    customer,
-    category,
-    address,
+    customer: billTo.customer || findCustomer(lines, invoiceNumber),
+    address: billTo.address || findAddress(lines),
     number: invoiceNumber,
-    amount: amountMatches.length ? Math.max(...amountMatches) : 0,
-    issueDate: dateMatches[0] || todayOffset(0),
-    dueDate: dateMatches[1] || todayOffset(14),
+    invoiceDate: dateMatches[0] || todayOffset(0),
+    terms,
+    poNumber: findValueAfterLabel(lines, /p\.?o\.?\s*no/i),
+    charge: findValueAfterLabel(lines, /^charge$/i),
+    cash: findValueAfterLabel(lines, /^cash$/i),
+    rep: findValueAfterLabel(lines, /^rep$/i) || text.match(/\bRep\s+([A-Z]{1,4})\b/i)?.[1] || "",
+    specialInstructions: parseSpecialInstructions(lines),
+    mainPhone: text.match(/Main\s+Tele[:\s]+([0-9()\-\s]+)/i)?.[1]?.trim() || "",
+    altPhone: text.match(/Alt\s+Tele[:\s]+([0-9()\-\s]+)/i)?.[1]?.trim() || "",
+    dt: text.match(/\bD\/T[:\s]*([^\n]+)/i)?.[1]?.trim() || "",
+    items,
+    itemsText: lineItemsToText(items),
+    customerTotalBalance: totals.customerTotalBalance,
+    total: totals.total,
+    paymentsCredits: totals.paymentsCredits,
+    balanceDue: totals.balanceDue,
+    amount: totals.balanceDue || totals.total || (amountMatches.length ? amountMatches.at(-1) : 0),
     rawText: text
   };
+}
+
+function amountsFromText(text) {
+  return [...text.matchAll(/\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+\.[0-9]{2})/g)]
+    .map((match) => Number(match[1].replace(/,/g, "")))
+    .filter((value) => Number.isFinite(value));
+}
+
+function parseBillTo(lines) {
+  const billIndex = lines.findIndex((line) => /bill\s*to/i.test(line));
+  if (billIndex < 0) return { customer: "", address: "" };
+  const block = lines.slice(billIndex + 1, billIndex + 5).filter((line) => !/special instructions|p\.?o\.?|terms|description/i.test(line));
+  return { customer: block[0] || "", address: block.slice(1).join(", ") };
+}
+
+function invoiceNumberNearDate(lines) {
+  const dateLine = lines.find((line) => /\b[0-1]?\d[\/\-][0-3]?\d[\/\-](?:20)?\d{2}\b/.test(line) && /\b\d{3,}\b/.test(line));
+  if (!dateLine) return "";
+  const numbers = [...dateLine.matchAll(/\b\d{3,}\b/g)].map((match) => match[0]);
+  return numbers.at(-1) || "";
+}
+
+function findValueAfterLabel(lines, pattern) {
+  const index = lines.findIndex((line) => pattern.test(line));
+  if (index < 0) return "";
+  const sameLine = lines[index].replace(pattern, "").replace(/^[:#\-\s]+/, "").trim();
+  if (sameLine) return sameLine;
+  return lines[index + 1] && !/description|qty|amount|special/i.test(lines[index + 1]) ? lines[index + 1] : "";
+}
+
+function parseSpecialInstructions(lines) {
+  const start = lines.findIndex((line) => /special instructions/i.test(line));
+  if (start < 0) return "";
+  const end = lines.findIndex((line, index) => index > start && /p\.?o\.?\s*no|terms|description/i.test(line));
+  return lines.slice(start + 1, end > start ? end : start + 5).join("\n");
+}
+
+function parseTotals(text, amounts) {
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const amountFromLine = (pattern) => {
+    const line = lines.find((entry) => pattern.test(entry));
+    if (!line) return 0;
+    return amountsFromText(line).at(-1) || 0;
+  };
+  const customerTotalBalance = amountFromLine(/customer\s+total\s+balance/i);
+  const paymentsCredits = amountFromLine(/payments\s*\/?\s*credits/i);
+  const balanceDue = amountFromLine(/balance\s+due/i) || amounts.at(-1) || 0;
+  const totalLine = lines.find((entry) => /^total\b/i.test(entry));
+  const total = totalLine ? amountsFromText(totalLine).at(-1) || 0 : amounts.at(-3) || balanceDue;
+  return { customerTotalBalance, total, paymentsCredits, balanceDue };
+}
+
+function parseLineItems(lines) {
+  const items = [];
+  const candidateLines = lines.filter((line) => !/invoice|bill to|date|terms|total|payments|balance|phone|fax|email|website|special instructions|description|qty|rate|amount|customer total/i.test(line));
+  candidateLines.forEach((line) => {
+    const amounts = amountsFromText(line);
+    if (!amounts.length && !/andoro|delivery/i.test(line)) return;
+    const numbers = [...line.matchAll(/\b\d+(?:\.\d+)?\b/g)].map((match) => Number(match[0]));
+    const amount = amounts.at(-1) || 0;
+    const rate = amounts.length > 1 ? amounts.at(-2) : amount;
+    const qty = numbers.find((value) => value > 0 && value < 1000) || "";
+    const unit = /\b(CS|EA|BX|LB|CT)\b/i.exec(line)?.[1]?.toUpperCase() || "";
+    const description = line.replace(/\$?\s*[0-9,]+\.\d{2}/g, "").replace(/\b(CS|EA|BX|LB|CT)\b/gi, "").replace(/\s+\d+\s*$/, "").trim();
+    if (description) items.push({ description, qty, unit, rate, amount });
+  });
+  return items.slice(0, 20);
 }
 
 function findCustomer(lines, invoiceNumber) {
@@ -367,17 +497,6 @@ function findAddress(lines) {
   const index = lines.indexOf(addressLine);
   const next = lines[index + 1] || "";
   return /\b[A-Z]{2}\b\s*\d{5}/i.test(next) ? `${addressLine}, ${next}` : addressLine;
-}
-
-function detectCategory(text) {
-  const categories = [
-    ["Materials", /material|lumber|concrete|pipe|wire|parts|supply|supplies|hardware/i],
-    ["Labor", /labor|installation|install|repair|service call|technician|hours/i],
-    ["Delivery", /delivery|freight|shipping|drop off|pickup|pick up/i],
-    ["Equipment", /equipment|rental|machine|tool|scaffold|lift/i],
-    ["Permit", /permit|inspection|fee|license/i]
-  ];
-  return categories.find(([, pattern]) => pattern.test(text))?.[0] || "Service";
 }
 
 function normalizeDate(value) {
@@ -469,12 +588,40 @@ function escapeAttribute(value = "") {
   return escapeHtml(value).replace(/`/g, "&#096;");
 }
 
+function lineItemsToText(items = []) {
+  return items.map((item) => [
+    item.description || "",
+    item.qty || "",
+    item.unit || "",
+    item.rate ?? "",
+    item.amount ?? ""
+  ].join(" | ")).join("\n");
+}
+
+function lineItemsFromText(text = "") {
+  return text.split("\n").map((line) => {
+    const parts = line.split("|").map((part) => part.trim());
+    if (!parts[0]) return null;
+    return {
+      description: parts[0],
+      qty: parts[1] || "",
+      unit: parts[2] || "",
+      rate: Number(parts[3] || 0),
+      amount: Number(parts[4] || parts[3] || 0)
+    };
+  }).filter(Boolean);
+}
+
 function resetInvoiceForm() {
   els.invoiceForm.reset();
   els.invoiceId.value = "";
   els.invoiceFormTitle.textContent = "Add Invoice";
   els.issueDate.value = todayOffset(0);
-  els.dueDate.value = todayOffset(14);
+  els.invoiceTerms.value = "Net 10";
+  els.customerTotalBalance.value = "";
+  els.invoiceTotal.value = "";
+  els.paymentsCredits.value = "";
+  els.balanceDue.value = "";
 }
 
 function resetStopForm() {
@@ -485,17 +632,28 @@ function resetStopForm() {
 
 function saveInvoiceFromForm(event) {
   event.preventDefault();
+  const items = lineItemsFromText(els.lineItemsText.value);
+  const total = Number(els.invoiceTotal.value || els.invoiceAmount.value);
+  const balanceDue = Number(els.balanceDue.value || total);
   const invoice = {
     id: els.invoiceId.value || crypto.randomUUID(),
     customer: els.customerName.value.trim(),
-    category: els.invoiceCategory.value.trim() || "Uncategorized",
     address: els.serviceAddress.value.trim(),
     number: els.invoiceNumber.value.trim(),
-    amount: Number(els.invoiceAmount.value),
-    issueDate: els.issueDate.value,
-    dueDate: els.dueDate.value,
-    status: els.invoiceStatus.value,
-    notes: els.invoiceNotes.value.trim()
+    amount: balanceDue,
+    invoiceDate: els.issueDate.value,
+    terms: els.invoiceTerms.value.trim(),
+    poNumber: els.poNumber.value.trim(),
+    rep: els.invoiceRep.value.trim(),
+    specialInstructions: els.specialInstructions.value.trim(),
+    mainPhone: els.mainPhone.value.trim(),
+    altPhone: els.altPhone.value.trim(),
+    dt: els.invoiceDt.value.trim(),
+    items,
+    customerTotalBalance: Number(els.customerTotalBalance.value || 0),
+    total,
+    paymentsCredits: Number(els.paymentsCredits.value || 0),
+    balanceDue
   };
   const index = state.invoices.findIndex((item) => item.id === invoice.id);
   if (index >= 0) state.invoices[index] = invoice;
@@ -559,7 +717,14 @@ function attachEvents() {
     if (!field || !id) return;
     const scan = state.scans.find((item) => item.id === id);
     if (!scan) return;
-    scan[field] = field === "amount" ? Number(event.target.value) : event.target.value;
+    if (["amount", "customerTotalBalance", "total", "paymentsCredits", "balanceDue"].includes(field)) {
+      scan[field] = Number(event.target.value);
+    } else if (field === "itemsText") {
+      scan.itemsText = event.target.value;
+      scan.items = lineItemsFromText(event.target.value);
+    } else {
+      scan[field] = event.target.value;
+    }
     saveState();
   });
 
@@ -579,14 +744,22 @@ function editInvoiceById(id) {
   if (!invoice) return;
   els.invoiceId.value = invoice.id;
   els.customerName.value = invoice.customer;
-  els.invoiceCategory.value = invoice.category || "";
   els.serviceAddress.value = invoice.address || "";
   els.invoiceNumber.value = invoice.number;
-  els.invoiceAmount.value = invoice.amount;
-  els.issueDate.value = invoice.issueDate;
-  els.dueDate.value = invoice.dueDate;
-  els.invoiceStatus.value = invoice.status;
-  els.invoiceNotes.value = invoice.notes || "";
+  els.invoiceAmount.value = invoiceBalance(invoice);
+  els.issueDate.value = invoiceDate(invoice);
+  els.invoiceTerms.value = invoice.terms || "";
+  els.poNumber.value = invoice.poNumber || "";
+  els.invoiceRep.value = invoice.rep || "";
+  els.specialInstructions.value = invoice.specialInstructions || "";
+  els.mainPhone.value = invoice.mainPhone || "";
+  els.altPhone.value = invoice.altPhone || "";
+  els.invoiceDt.value = invoice.dt || "";
+  els.lineItemsText.value = lineItemsToText(invoice.items);
+  els.customerTotalBalance.value = invoice.customerTotalBalance || "";
+  els.invoiceTotal.value = invoiceTotal(invoice) || "";
+  els.paymentsCredits.value = invoice.paymentsCredits || "";
+  els.balanceDue.value = invoiceBalance(invoice) || "";
   els.invoiceFormTitle.textContent = "Edit Invoice";
   setTab("invoices");
 }
@@ -624,7 +797,7 @@ function buildStopsFromInvoices() {
       address: invoice.address,
       lat: 0,
       lng: 0,
-      priority: statusFor(invoice) === "overdue" ? "high" : "normal"
+      priority: invoiceBalance(invoice) > 0 ? "high" : "normal"
     }));
   state.stops.push(...newStops);
   state.optimizedStopIds = [];
@@ -792,7 +965,7 @@ function clearScans() {
   els.invoiceFiles.value = "";
   els.invoiceCamera.value = "";
   els.photoGrid.replaceChildren();
-  els.scanStatus.textContent = "No photos selected";
+  els.scanStatus.textContent = "No files selected";
   saveState();
   renderScans();
 }
@@ -802,14 +975,25 @@ function saveScannedInvoices() {
   const invoices = accepted.map((scan) => ({
     id: crypto.randomUUID(),
     customer: scan.customer || "Unknown customer",
-    category: scan.category || "Uncategorized",
     address: scan.address || "",
     number: scan.number || `SCAN-${Date.now()}`,
-    amount: Number(scan.amount || 0),
-    issueDate: scan.issueDate || todayOffset(0),
-    dueDate: scan.dueDate || todayOffset(14),
-    status: "open",
-    notes: `Created from invoice photo ${scan.fileName || ""}`.trim()
+    amount: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
+    invoiceDate: scan.invoiceDate || todayOffset(0),
+    terms: scan.terms || "",
+    poNumber: scan.poNumber || "",
+    charge: scan.charge || "",
+    cash: scan.cash || "",
+    rep: scan.rep || "",
+    specialInstructions: scan.specialInstructions || "",
+    mainPhone: scan.mainPhone || "",
+    altPhone: scan.altPhone || "",
+    dt: scan.dt || "",
+    items: scan.items || lineItemsFromText(scan.itemsText),
+    customerTotalBalance: Number(scan.customerTotalBalance || 0),
+    total: Number(scan.total || 0),
+    paymentsCredits: Number(scan.paymentsCredits || 0),
+    balanceDue: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
+    sourceFile: scan.fileName || ""
   }));
   state.invoices.unshift(...invoices);
   saveState();
