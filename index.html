@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Andoro & Sons | Invoice Route Desk</title>
+    <meta name="theme-color" content="#0d3326">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Invoice Route Desk">
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="apple-touch-icon" href="assets/icon-192.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <img class="brand-logo" src="assets/andoro-logo.jpg" alt="Andoro & Sons Pizza logo">
+          <div>
+            <span>Invoice Route Desk</span>
+          </div>
+        </div>
+        <nav class="nav-tabs" aria-label="Main views">
+          <button class="tab-button active" data-tab="dashboard" type="button">Dashboard</button>
+          <button class="tab-button" data-tab="scan" type="button">Scan</button>
+          <button class="tab-button" data-tab="invoices" type="button">Invoices</button>
+          <button class="tab-button" data-tab="routes" type="button">Routes</button>
+          <button class="tab-button" data-tab="settings" type="button">Data</button>
+        </nav>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Operations</p>
+            <h1>Invoices and routes in one working view</h1>
+          </div>
+          <div class="today-card">
+            <span id="todayLabel">Today</span>
+            <strong id="openBalance">$0</strong>
+            <small>open balance</small>
+          </div>
+        </header>
+
+        <section class="tab-panel active" id="dashboard">
+          <div class="metric-grid">
+            <article class="metric">
+              <span>Open invoices</span>
+              <strong id="openInvoiceCount">0</strong>
+            </article>
+            <article class="metric">
+              <span>Overdue</span>
+              <strong id="overdueCount">0</strong>
+            </article>
+            <article class="metric">
+              <span>Paid this month</span>
+              <strong id="paidThisMonth">$0</strong>
+            </article>
+            <article class="metric">
+              <span>Route stops</span>
+              <strong id="routeStopCount">0</strong>
+            </article>
+          </div>
+
+          <div class="two-column">
+            <section class="work-panel">
+              <div class="panel-heading">
+                <h2>Needs Attention</h2>
+                <button class="ghost-button" data-tab-jump="invoices" type="button">View all</button>
+              </div>
+              <div class="list-stack" id="attentionList"></div>
+            </section>
+
+            <section class="work-panel">
+              <div class="panel-heading">
+                <h2>Next Route</h2>
+                <button class="ghost-button" data-tab-jump="routes" type="button">Optimize</button>
+              </div>
+              <ol class="route-preview" id="routePreview"></ol>
+            </section>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="scan">
+          <div class="scan-layout">
+            <section class="work-panel">
+              <div class="panel-heading">
+                <h2>Today's Invoice Photos</h2>
+                <button class="ghost-button" id="clearScanQueue" type="button">Clear scans</button>
+              </div>
+              <div class="scan-dropzone" id="scanDropzone">
+                <input id="invoicePhotos" accept="image/*" capture="environment" multiple type="file">
+                <strong>Take pictures or choose invoice photos</strong>
+                <span>Each image is read on this computer, then turned into editable invoice details.</span>
+              </div>
+              <div class="scan-actions">
+                <button class="primary-button" id="processPhotos" type="button">Read invoice photos</button>
+                <span id="scanStatus">No photos selected</span>
+              </div>
+              <div class="photo-grid" id="photoGrid"></div>
+            </section>
+
+            <section class="work-panel">
+              <div class="panel-heading">
+                <h2>Extracted Categories</h2>
+                <button class="primary-button" id="saveScannedInvoices" type="button">Save accepted invoices</button>
+              </div>
+              <div class="scan-summary" id="scanSummary"></div>
+              <div class="scan-results" id="scanResults"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="invoices">
+          <div class="split-layout">
+            <form class="editor-panel" id="invoiceForm">
+              <div class="panel-heading">
+                <h2 id="invoiceFormTitle">Add Invoice</h2>
+                <button class="ghost-button" id="clearInvoiceForm" type="button">Clear</button>
+              </div>
+              <input type="hidden" id="invoiceId">
+              <label>
+                Customer
+                <input id="customerName" required placeholder="Customer name">
+              </label>
+              <label>
+                Category
+                <input id="invoiceCategory" placeholder="Materials, labor, service, delivery">
+              </label>
+              <label>
+                Service address
+                <input id="serviceAddress" placeholder="Street, city, state">
+              </label>
+              <div class="field-row">
+                <label>
+                  Invoice #
+                  <input id="invoiceNumber" required placeholder="INV-1001">
+                </label>
+                <label>
+                  Amount
+                  <input id="invoiceAmount" required min="0" step="0.01" type="number" placeholder="0.00">
+                </label>
+              </div>
+              <div class="field-row">
+                <label>
+                  Issue date
+                  <input id="issueDate" required type="date">
+                </label>
+                <label>
+                  Due date
+                  <input id="dueDate" required type="date">
+                </label>
+              </div>
+              <label>
+                Status
+                <select id="invoiceStatus">
+                  <option value="open">Open</option>
+                  <option value="paid">Paid</option>
+                  <option value="overdue">Overdue</option>
+                </select>
+              </label>
+              <label>
+                Notes
+                <textarea id="invoiceNotes" rows="3" placeholder="PO number, job details, payment notes"></textarea>
+              </label>
+              <button class="primary-button" type="submit">Save invoice</button>
+            </form>
+
+            <section class="work-panel">
+              <div class="panel-heading controls-heading">
+                <h2>Invoice Ledger</h2>
+                <div class="control-row">
+                  <input id="invoiceSearch" placeholder="Search invoices">
+                  <select id="invoiceFilter" aria-label="Filter invoices">
+                    <option value="all">All</option>
+                    <option value="open">Open</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="paid">Paid</option>
+                  </select>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Category</th>
+                      <th>Invoice</th>
+                      <th>Due</th>
+                      <th>Status</th>
+                      <th class="align-right">Amount</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody id="invoiceTable"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="routes">
+          <div class="split-layout">
+            <form class="editor-panel" id="stopForm">
+              <div class="panel-heading">
+                <h2 id="stopFormTitle">Add Stop</h2>
+                <button class="ghost-button" id="clearStopForm" type="button">Clear</button>
+              </div>
+              <input type="hidden" id="stopId">
+              <label>
+                Stop name
+                <input id="stopName" required placeholder="Customer or job name">
+              </label>
+              <label>
+                Address
+                <input id="stopAddress" required placeholder="Street, city, state">
+              </label>
+              <div class="field-row">
+                <label>
+                  Latitude
+                  <input id="stopLat" required step="any" type="number" placeholder="41.8781">
+                </label>
+                <label>
+                  Longitude
+                  <input id="stopLng" required step="any" type="number" placeholder="-87.6298">
+                </label>
+              </div>
+              <label>
+                Priority
+                <select id="stopPriority">
+                  <option value="normal">Normal</option>
+                  <option value="high">High</option>
+                  <option value="low">Low</option>
+                </select>
+              </label>
+              <button class="primary-button" type="submit">Save stop</button>
+            </form>
+
+            <section class="work-panel">
+              <div class="panel-heading controls-heading">
+                <h2>Route Builder</h2>
+                <div class="control-row">
+                  <button class="secondary-button" id="useCurrentLocation" type="button">Use my location</button>
+                  <button class="secondary-button" id="stopsFromInvoices" type="button">Build from invoices</button>
+                  <button class="secondary-button" id="geocodeStops" type="button">Find coordinates</button>
+                  <button class="primary-button" id="optimizeRoute" type="button">Optimize route</button>
+                </div>
+              </div>
+              <div class="origin-grid">
+                <label>
+                  Start latitude
+                  <input id="originLat" step="any" type="number" placeholder="Start lat">
+                </label>
+                <label>
+                  Start longitude
+                  <input id="originLng" step="any" type="number" placeholder="Start lng">
+                </label>
+              </div>
+              <div class="route-actions">
+                <span id="routeDistance">No route calculated</span>
+                <a class="map-link disabled" id="mapsLink" href="#" target="_blank" rel="noreferrer">Open in Maps</a>
+              </div>
+              <ol class="route-list" id="routeList"></ol>
+            </section>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="settings">
+          <div class="two-column">
+            <section class="work-panel">
+              <div class="panel-heading">
+                <h2>Backup</h2>
+              </div>
+              <p class="muted">Export a JSON backup before changing browsers or computers.</p>
+              <div class="button-row">
+                <button class="primary-button" id="exportData" type="button">Export data</button>
+                <label class="file-button">
+                  Import data
+                  <input id="importData" accept="application/json" type="file">
+                </label>
+              </div>
+            </section>
+            <section class="work-panel">
+              <div class="panel-heading">
+                <h2>Reset</h2>
+              </div>
+              <p class="muted">This removes the local browser copy for this app.</p>
+              <button class="danger-button" id="resetData" type="button">Reset all data</button>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="emptyStateTemplate">
+      <div class="empty-state">
+        <strong>Nothing here yet</strong>
+        <span>Add a record to start tracking the work.</span>
+      </div>
+    </template>
+
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="app.js"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("service-worker.js");
+      }
+    </script>
+  </body>
+</html>
