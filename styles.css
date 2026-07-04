@@ -41,9 +41,17 @@ body.access-locked {
 
 .access-screen {
   width: min(100%, 380px);
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: var(--page);
 }
 
 .access-card {
+  width: min(100%, 380px);
   display: grid;
   gap: 16px;
   padding: 22px;

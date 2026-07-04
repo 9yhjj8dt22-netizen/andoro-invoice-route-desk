@@ -194,6 +194,7 @@ const els = {
   accessForm: document.querySelector("#accessForm"),
   accessCode: document.querySelector("#accessCode"),
   accessError: document.querySelector("#accessError"),
+  appShell: document.querySelector("#appShell"),
   todayLabel: document.querySelector("#todayLabel"),
   openBalance: document.querySelector("#openBalance"),
   openInvoiceCount: document.querySelector("#openInvoiceCount"),
@@ -284,6 +285,7 @@ function normalizeAccessCode(value = "") {
 }
 
 function unlockApp() {
+  els.appShell.hidden = false;
   document.body.classList.remove("access-locked");
   els.accessError.textContent = "";
 }

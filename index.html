@@ -9,7 +9,11 @@
     <meta name="apple-mobile-web-app-title" content="Invoice Order Form">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="apple-touch-icon" href="assets/icon-192.png">
-    <link rel="stylesheet" href="styles.css">
+    <style>
+      body.access-locked .app-shell { display: none !important; }
+      body:not(.access-locked) .access-screen { display: none !important; }
+    </style>
+    <link rel="stylesheet" href="styles.css?v=18">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -24,7 +28,7 @@
         <span id="accessError" role="alert"></span>
       </form>
     </section>
-    <div class="app-shell">
+    <div class="app-shell" id="appShell" hidden>
       <aside class="sidebar">
         <div class="brand">
           <img class="brand-logo" src="assets/andoro-pizza-logo.jpg" alt="Andoro & Sons Pizza logo">
@@ -454,7 +458,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=17"></script>
+    <script src="app.js?v=18"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
