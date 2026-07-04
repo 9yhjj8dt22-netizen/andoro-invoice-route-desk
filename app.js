@@ -82,6 +82,8 @@ const sampleData = {
     {
       id: "store-mosers-ashland",
       name: "Mosers Foods - Ashland",
+      orderBlocked: true,
+      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "Amy-Frozen Food Mgr\n109 Eastside Dr.\nAshland, MO 65010",
       terms: "Net 10",
       rep: "RRM",
@@ -90,6 +92,8 @@ const sampleData = {
     {
       id: "store-mosers-fulton",
       name: "Mosers Foods- Fulton",
+      orderBlocked: true,
+      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "2020 N. Bluff\nFulton, MO 65251",
       terms: "Net 10",
       rep: "RRM",
@@ -98,6 +102,8 @@ const sampleData = {
     {
       id: "store-hyvee-osage-beach",
       name: "Hy-Vee (Osage Beach)",
+      orderBlocked: true,
+      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "997 Barry Prewitt Memorial DR\nOsage Beach, MO 65065",
       poNumber: "Using as Order Form",
       rep: "LC",
@@ -106,6 +112,8 @@ const sampleData = {
     {
       id: "store-camdenton-sal",
       name: "Camdenton SAL",
+      orderBlocked: true,
+      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "709 N Business Rte 5\nCamdenton, MO 65020",
       products: [
         { ...catalog.supreme12, rate: 4.85 },
@@ -118,6 +126,8 @@ const sampleData = {
     {
       id: "store-woods-sunrise-beach",
       name: "Woods Supermarket- Sunrise Beach",
+      orderBlocked: true,
+      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "13655 N State Highway 5\nSunrise Beach, MO 65079",
       rep: "RRM",
       products: [...standardTwelveInch, delivery10]
@@ -125,6 +135,8 @@ const sampleData = {
     {
       id: "store-woods-lake-ozark",
       name: "Wood's Supermarket",
+      orderBlocked: true,
+      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "2107 Bagnell Dam Blvd\nLake Ozark, MO 65049",
       products: [
         { ...catalog.bbqChicken12, rate: 5 },
@@ -140,6 +152,8 @@ const sampleData = {
     {
       id: "store-hyvee-columbia-nifong",
       name: "Hy-Vee (Columbia- Nifong)",
+      orderBlocked: true,
+      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "405 E. Nifong Blvd.\nColumbia, MO 65201",
       rep: "RRM",
       products: hyVeeProducts
@@ -147,6 +161,8 @@ const sampleData = {
     {
       id: "store-hyvee-columbia-1082",
       name: "Hy-Vee (Columbia) #1082",
+      orderBlocked: true,
+      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "Brian Hayes Frozen Food Mgr\n25 Conley Road\nColumbia, MO 65201",
       products: [
         catalog.pepperoni12,
@@ -169,6 +185,8 @@ const sampleData = {
     {
       id: "store-st-louis-county-parks",
       name: "St. Louis County Parks",
+      orderBlocked: true,
+      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "550 Weidman Road\nManchester, MO 63011",
       products: [
         { ...catalog.pepperoni12, rate: 5.45 },
@@ -209,6 +227,7 @@ const els = {
   storeSelect: document.querySelector("#storeSelect"),
   saveStore: document.querySelector("#saveStore"),
   storeProductList: document.querySelector("#storeProductList"),
+  storeOrderNotice: document.querySelector("#storeOrderNotice"),
   customerName: document.querySelector("#customerName"),
   customerEmail: document.querySelector("#customerEmail"),
   serviceAddress: document.querySelector("#serviceAddress"),
@@ -242,6 +261,7 @@ const els = {
   clearSignature: document.querySelector("#clearSignature"),
   saveAndPrintInvoice: document.querySelector("#saveAndPrintInvoice"),
   saveAndShareInvoice: document.querySelector("#saveAndShareInvoice"),
+  saveInvoiceButton: document.querySelector("#saveInvoiceButton"),
   invoiceSearch: document.querySelector("#invoiceSearch"),
   invoiceFilter: document.querySelector("#invoiceFilter"),
   invoiceTable: document.querySelector("#invoiceTable"),
@@ -418,10 +438,47 @@ function renderStores() {
   });
   els.storeSelect.value = stores.some((store) => store.id === selected) ? selected : "";
   renderStoreProducts();
+  renderStoreOrderNotice();
 }
 
 function selectedStore() {
   return (state.stores || []).find((store) => store.id === els.storeSelect.value);
+}
+
+function storeBlocksOrders(store = selectedStore()) {
+  return Boolean(store?.orderBlocked);
+}
+
+function orderBlockedMessage(store = selectedStore()) {
+  return store?.orderBlockedReason || "This store is marked Lisa only. Do not create an invoice for this store.";
+}
+
+function setInvoiceActionsEnabled(enabled) {
+  [els.saveInvoiceButton, els.saveAndPrintInvoice, els.saveAndShareInvoice].forEach((button) => {
+    button.disabled = !enabled;
+  });
+}
+
+function renderStoreOrderNotice() {
+  const store = selectedStore();
+  const blocked = storeBlocksOrders(store);
+  els.storeOrderNotice.hidden = !blocked;
+  els.storeOrderNotice.textContent = blocked ? orderBlockedMessage(store) : "";
+  setInvoiceActionsEnabled(!blocked);
+}
+
+function invoiceStore(invoice = {}) {
+  return (state.stores || []).find((store) => store.name.toLowerCase() === String(invoice.customer || "").toLowerCase());
+}
+
+function invoiceBlocksOrders(invoice = {}) {
+  return storeBlocksOrders(invoiceStore(invoice));
+}
+
+function blockOrderAction(store = selectedStore()) {
+  if (!storeBlocksOrders(store)) return false;
+  alert(orderBlockedMessage(store));
+  return true;
 }
 
 function productKey(product = {}) {
@@ -491,6 +548,8 @@ function mergeStoreFromInvoice(targetState, invoice) {
     terms: invoice.terms || existing?.terms || "",
     poNumber: invoice.poNumber || existing?.poNumber || "",
     rep: invoice.rep || existing?.rep || "",
+    orderBlocked: existing?.orderBlocked || false,
+    orderBlockedReason: existing?.orderBlockedReason || "",
     mainPhone: invoice.mainPhone || existing?.mainPhone || "",
     altPhone: invoice.altPhone || existing?.altPhone || "",
     dt: invoice.dt || existing?.dt || "",
@@ -1218,6 +1277,7 @@ function resetInvoiceForm() {
   els.balanceDue.value = "";
   clearSignaturePad();
   renderStoreProducts();
+  renderStoreOrderNotice();
 }
 
 function storeFromForm(existingId = "") {
@@ -1230,6 +1290,8 @@ function storeFromForm(existingId = "") {
     terms: els.invoiceTerms.value.trim(),
     poNumber: els.poNumber.value.trim(),
     rep: els.invoiceRep.value.trim(),
+    orderBlocked: existing?.orderBlocked || false,
+    orderBlockedReason: existing?.orderBlockedReason || "",
     mainPhone: els.mainPhone.value.trim(),
     altPhone: els.altPhone.value.trim(),
     dt: els.invoiceDt.value.trim(),
@@ -1259,7 +1321,11 @@ function saveStoreFromForm() {
 
 function loadSelectedStore() {
   const store = (state.stores || []).find((item) => item.id === els.storeSelect.value);
-  if (!store) return;
+  if (!store) {
+    renderStoreProducts();
+    renderStoreOrderNotice();
+    return;
+  }
   els.customerName.value = store.name || "";
   els.customerEmail.value = store.email || "";
   els.serviceAddress.value = store.address || "";
@@ -1282,17 +1348,22 @@ function loadSelectedStore() {
     updateTotalsFromLineItems();
   }
   renderStoreProducts();
+  renderStoreOrderNotice();
 }
 
 function saveAndShareInvoice() {
   if (!els.invoiceForm.reportValidity()) return;
+  if (blockOrderAction()) return;
   const invoice = saveInvoice({ keepForm: true });
+  if (!invoice) return;
   emailOffice(invoice);
 }
 
 function saveAndPrintInvoice() {
   if (!els.invoiceForm.reportValidity()) return;
+  if (blockOrderAction()) return;
   const invoice = saveInvoice({ keepForm: true });
+  if (!invoice) return;
   printInvoice(invoice);
 }
 
@@ -1304,6 +1375,7 @@ function resetStopForm() {
 
 function saveInvoiceFromForm(event) {
   event.preventDefault();
+  if (blockOrderAction()) return;
   saveInvoice();
 }
 
@@ -1341,6 +1413,10 @@ function invoiceFromForm() {
 
 function saveInvoice({ keepForm = false } = {}) {
   const invoice = invoiceFromForm();
+  if (invoiceBlocksOrders(invoice)) {
+    alert(orderBlockedMessage(invoiceStore(invoice)));
+    return null;
+  }
   const index = state.invoices.findIndex((item) => item.id === invoice.id);
   if (index >= 0) state.invoices[index] = invoice;
   else state.invoices.unshift(invoice);
@@ -1501,6 +1577,8 @@ function editInvoiceById(id) {
   els.balanceDue.value = invoiceBalance(invoice) || "";
   loadSignature(invoice.customerSignature || "");
   els.invoiceFormTitle.textContent = "Edit Invoice";
+  renderStoreProducts();
+  renderStoreOrderNotice();
   setTab("invoices");
 }
 
@@ -1513,17 +1591,20 @@ function deleteInvoiceById(id) {
 
 function emailInvoiceById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
+  if (invoiceBlocksOrders(invoice)) return alert(orderBlockedMessage(invoiceStore(invoice)));
   if (invoice) emailInvoice(invoice);
 }
 
 function emailOfficeById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
+  if (invoiceBlocksOrders(invoice)) return alert(orderBlockedMessage(invoiceStore(invoice)));
   if (invoice) emailOffice(invoice);
 }
 
 async function shareInvoiceById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
   if (!invoice) return;
+  if (invoiceBlocksOrders(invoice)) return alert(orderBlockedMessage(invoiceStore(invoice)));
   const text = invoiceMessage(invoice);
   if (navigator.share) {
     try {
@@ -1543,6 +1624,7 @@ async function shareInvoiceById(id) {
 function printInvoiceById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
   if (!invoice) return;
+  if (invoiceBlocksOrders(invoice)) return alert(orderBlockedMessage(invoiceStore(invoice)));
   printInvoice(invoice);
 }
 
