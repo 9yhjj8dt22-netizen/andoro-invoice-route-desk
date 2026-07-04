@@ -7,6 +7,7 @@ const sampleData = {
     {
       id: crypto.randomUUID(),
       customer: "North Lake Supply",
+      customerEmail: "",
       address: "100 N LaSalle St, Chicago, IL",
       number: "INV-1001",
       amount: 842.5,
@@ -24,6 +25,7 @@ const sampleData = {
     {
       id: crypto.randomUUID(),
       customer: "Riverbend Builders",
+      customerEmail: "",
       address: "233 S Wacker Dr, Chicago, IL",
       number: "INV-1002",
       amount: 1260,
@@ -59,11 +61,16 @@ const sampleData = {
   ],
   optimizedStopIds: [],
   origin: { lat: 41.8781, lng: -87.6298 },
-  scans: []
+  scans: [],
+  settings: {
+    officeEmail: "lisa@andoropizza.com",
+    ryanEmail: "ryan@andoropizza.com"
+  }
 };
 
 let state = loadState();
 let selectedFiles = [];
+let signatureIsBlank = true;
 
 const els = {
   todayLabel: document.querySelector("#todayLabel"),
@@ -78,6 +85,7 @@ const els = {
   invoiceId: document.querySelector("#invoiceId"),
   invoiceFormTitle: document.querySelector("#invoiceFormTitle"),
   customerName: document.querySelector("#customerName"),
+  customerEmail: document.querySelector("#customerEmail"),
   serviceAddress: document.querySelector("#serviceAddress"),
   invoiceNumber: document.querySelector("#invoiceNumber"),
   invoiceAmount: document.querySelector("#invoiceAmount"),
@@ -85,16 +93,29 @@ const els = {
   invoiceTerms: document.querySelector("#invoiceTerms"),
   poNumber: document.querySelector("#poNumber"),
   invoiceRep: document.querySelector("#invoiceRep"),
+  invoiceCharge: document.querySelector("#invoiceCharge"),
+  invoiceCash: document.querySelector("#invoiceCash"),
   specialInstructions: document.querySelector("#specialInstructions"),
   mainPhone: document.querySelector("#mainPhone"),
   altPhone: document.querySelector("#altPhone"),
   invoiceDt: document.querySelector("#invoiceDt"),
+  itemDescription: document.querySelector("#itemDescription"),
+  itemUpc: document.querySelector("#itemUpc"),
+  itemQty: document.querySelector("#itemQty"),
+  itemUnit: document.querySelector("#itemUnit"),
+  itemRate: document.querySelector("#itemRate"),
+  itemAmount: document.querySelector("#itemAmount"),
+  addOrderItem: document.querySelector("#addOrderItem"),
   lineItemsText: document.querySelector("#lineItemsText"),
   customerTotalBalance: document.querySelector("#customerTotalBalance"),
   invoiceTotal: document.querySelector("#invoiceTotal"),
   paymentsCredits: document.querySelector("#paymentsCredits"),
   balanceDue: document.querySelector("#balanceDue"),
   clearInvoiceForm: document.querySelector("#clearInvoiceForm"),
+  customerSignaturePad: document.querySelector("#customerSignaturePad"),
+  clearSignature: document.querySelector("#clearSignature"),
+  saveAndPrintInvoice: document.querySelector("#saveAndPrintInvoice"),
+  saveAndShareInvoice: document.querySelector("#saveAndShareInvoice"),
   invoiceSearch: document.querySelector("#invoiceSearch"),
   invoiceFilter: document.querySelector("#invoiceFilter"),
   invoiceTable: document.querySelector("#invoiceTable"),
@@ -119,6 +140,9 @@ const els = {
   exportData: document.querySelector("#exportData"),
   importData: document.querySelector("#importData"),
   resetData: document.querySelector("#resetData"),
+  officeEmail: document.querySelector("#officeEmail"),
+  ryanEmail: document.querySelector("#ryanEmail"),
+  saveOfficeSettings: document.querySelector("#saveOfficeSettings"),
   invoiceFiles: document.querySelector("#invoiceFiles"),
   invoiceCamera: document.querySelector("#invoiceCamera"),
   processPhotos: document.querySelector("#processPhotos"),
@@ -140,7 +164,12 @@ function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
   if (!saved) return structuredClone(sampleData);
   try {
-    return { ...structuredClone(sampleData), ...JSON.parse(saved) };
+    const parsed = JSON.parse(saved);
+    return {
+      ...structuredClone(sampleData),
+      ...parsed,
+      settings: { ...structuredClone(sampleData.settings), ...(parsed.settings || {}) }
+    };
   } catch {
     return structuredClone(sampleData);
   }
@@ -196,6 +225,8 @@ function render() {
   els.routeStopCount.textContent = state.stops.length;
   els.originLat.value = state.origin?.lat ?? "";
   els.originLng.value = state.origin?.lng ?? "";
+  els.officeEmail.value = state.settings?.officeEmail || sampleData.settings.officeEmail;
+  els.ryanEmail.value = state.settings?.ryanEmail || sampleData.settings.ryanEmail;
 
   renderAttention();
   renderInvoices();
@@ -239,6 +270,7 @@ function renderInvoices() {
       invoice.poNumber,
       invoice.rep,
       invoice.specialInstructions,
+      invoice.customerEmail,
       invoice.mainPhone,
       invoice.altPhone,
       invoice.dt,
@@ -249,7 +281,7 @@ function renderInvoices() {
   els.invoiceTable.replaceChildren();
   if (!rows.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="6"><div class="empty-state"><strong>No invoices found</strong><span>Add or scan invoices to fill the ledger.</span></div></td>`;
+    tr.innerHTML = `<td colspan="7"><div class="empty-state"><strong>No invoices found</strong><span>Add or scan invoices to fill the ledger.</span></div></td>`;
     els.invoiceTable.append(tr);
     return;
   }
@@ -261,6 +293,12 @@ function renderInvoices() {
       <td>${formatDate(invoiceDate(invoice))}</td>
       <td>${escapeHtml(invoice.terms || "")}</td>
       <td class="align-right">${money.format(invoiceBalance(invoice))}</td>
+      <td><div class="row-actions">
+        <button class="icon-action" data-email-invoice="${invoice.id}" type="button">Customer</button>
+        <button class="icon-action" data-office-invoice="${invoice.id}" type="button">Office</button>
+        <button class="icon-action" data-share-invoice="${invoice.id}" type="button">Share</button>
+        <button class="icon-action" data-print-invoice="${invoice.id}" type="button">Print</button>
+      </div></td>
       <td><div class="row-actions">
         <button class="icon-action" data-edit-invoice="${invoice.id}" type="button">Edit</button>
         <button class="icon-action" data-delete-invoice="${invoice.id}" type="button">Delete</button>
@@ -347,6 +385,7 @@ function renderScans() {
         <label>Customer<input data-scan-field="customer" data-scan-id="${scan.id}" value="${escapeAttribute(scan.customer)}"></label>
         <label>Invoice #<input data-scan-field="number" data-scan-id="${scan.id}" value="${escapeAttribute(scan.number)}"></label>
       </div>
+      <label>Customer email<input data-scan-field="customerEmail" data-scan-id="${scan.id}" type="email" value="${escapeAttribute(scan.customerEmail || "")}"></label>
       <label>Address<input data-scan-field="address" data-scan-id="${scan.id}" value="${escapeAttribute(scan.address)}"></label>
       <div class="field-row">
         <label>Invoice date<input data-scan-field="invoiceDate" data-scan-id="${scan.id}" type="date" value="${escapeAttribute(scan.invoiceDate)}"></label>
@@ -395,6 +434,7 @@ function parseInvoiceText(rawText, fileName) {
     accepted: true,
     fileName,
     customer: billTo.customer || findCustomer(lines, invoiceNumber),
+    customerEmail: text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "",
     address: billTo.address || findAddress(lines),
     number: invoiceNumber,
     invoiceDate: dateMatches[0] || todayOffset(0),
@@ -591,6 +631,7 @@ function escapeAttribute(value = "") {
 function lineItemsToText(items = []) {
   return items.map((item) => [
     item.description || "",
+    item.upc || "",
     item.qty || "",
     item.unit || "",
     item.rate ?? "",
@@ -602,6 +643,16 @@ function lineItemsFromText(text = "") {
   return text.split("\n").map((line) => {
     const parts = line.split("|").map((part) => part.trim());
     if (!parts[0]) return null;
+    if (parts.length >= 6) {
+      return {
+        description: parts[0],
+        upc: parts[1] || "",
+        qty: parts[2] || "",
+        unit: parts[3] || "",
+        rate: Number(parts[4] || 0),
+        amount: Number(parts[5] || parts[4] || 0)
+      };
+    }
     return {
       description: parts[0],
       qty: parts[1] || "",
@@ -610,6 +661,141 @@ function lineItemsFromText(text = "") {
       amount: Number(parts[4] || parts[3] || 0)
     };
   }).filter(Boolean);
+}
+
+function updateItemAmount() {
+  const qty = Number(els.itemQty.value || 0);
+  const rate = Number(els.itemRate.value || 0);
+  if (qty && rate) els.itemAmount.value = (qty * rate).toFixed(2);
+}
+
+function addOrderItem() {
+  const description = els.itemDescription.value.trim();
+  if (!description) {
+    alert("Add an item description first.");
+    return;
+  }
+  const qty = els.itemQty.value.trim();
+  const rate = Number(els.itemRate.value || 0);
+  const amount = Number(els.itemAmount.value || (Number(qty || 0) * rate));
+  const item = {
+    description,
+    upc: els.itemUpc.value.trim(),
+    qty,
+    unit: els.itemUnit.value,
+    rate,
+    amount
+  };
+  const current = els.lineItemsText.value.trim();
+  els.lineItemsText.value = [current, lineItemsToText([item])].filter(Boolean).join("\n");
+  els.itemDescription.value = "";
+  els.itemUpc.value = "";
+  els.itemQty.value = "";
+  els.itemRate.value = "";
+  els.itemAmount.value = "";
+  els.itemDescription.focus();
+  updateTotalsFromLineItems();
+}
+
+function updateTotalsFromLineItems() {
+  const total = lineItemsFromText(els.lineItemsText.value).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  if (total > 0) {
+    els.invoiceTotal.value = total.toFixed(2);
+    els.invoiceAmount.value = total.toFixed(2);
+  }
+  updateBalanceDue();
+}
+
+function updateBalanceDue() {
+  const total = Number(els.invoiceTotal.value || els.invoiceAmount.value || 0);
+  const credits = Number(els.paymentsCredits.value || 0);
+  const balance = Math.max(total - credits, 0);
+  els.balanceDue.value = balance ? balance.toFixed(2) : "";
+}
+
+function setupSignaturePad() {
+  const canvas = els.customerSignaturePad;
+  const context = canvas.getContext("2d");
+  let drawing = false;
+  let lastPoint = null;
+
+  const resize = () => {
+    const saved = signatureIsBlank ? "" : canvas.toDataURL("image/png");
+    const rect = canvas.getBoundingClientRect();
+    const scale = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(rect.width * scale));
+    canvas.height = Math.max(1, Math.round(rect.height * scale));
+    context.setTransform(scale, 0, 0, scale, 0, 0);
+    context.lineWidth = 2.3;
+    context.lineCap = "round";
+    context.lineJoin = "round";
+    context.strokeStyle = "#10251d";
+    if (saved) loadSignature(saved);
+  };
+
+  const pointFromEvent = (event) => {
+    const rect = canvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top
+    };
+  };
+
+  const start = (event) => {
+    event.preventDefault();
+    drawing = true;
+    lastPoint = pointFromEvent(event);
+  };
+
+  const draw = (event) => {
+    if (!drawing || !lastPoint) return;
+    event.preventDefault();
+    const point = pointFromEvent(event);
+    context.beginPath();
+    context.moveTo(lastPoint.x, lastPoint.y);
+    context.lineTo(point.x, point.y);
+    context.stroke();
+    lastPoint = point;
+    signatureIsBlank = false;
+  };
+
+  const stop = () => {
+    drawing = false;
+    lastPoint = null;
+  };
+
+  canvas.addEventListener("pointerdown", start);
+  canvas.addEventListener("pointermove", draw);
+  canvas.addEventListener("pointerup", stop);
+  canvas.addEventListener("pointercancel", stop);
+  canvas.addEventListener("pointerleave", stop);
+  window.addEventListener("resize", resize);
+  resize();
+}
+
+function clearSignaturePad() {
+  const canvas = els.customerSignaturePad;
+  const context = canvas.getContext("2d");
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  signatureIsBlank = true;
+}
+
+function getSignatureData() {
+  return signatureIsBlank ? "" : els.customerSignaturePad.toDataURL("image/png");
+}
+
+function loadSignature(dataUrl) {
+  clearSignaturePad();
+  if (!dataUrl) return;
+  const image = new Image();
+  image.onload = () => {
+    const canvas = els.customerSignaturePad;
+    const context = canvas.getContext("2d");
+    const rect = canvas.getBoundingClientRect();
+    context.drawImage(image, 0, 0, rect.width, rect.height);
+    signatureIsBlank = false;
+  };
+  image.src = dataUrl;
 }
 
 function resetInvoiceForm() {
@@ -622,6 +808,19 @@ function resetInvoiceForm() {
   els.invoiceTotal.value = "";
   els.paymentsCredits.value = "";
   els.balanceDue.value = "";
+  clearSignaturePad();
+}
+
+function saveAndShareInvoice() {
+  if (!els.invoiceForm.reportValidity()) return;
+  const invoice = saveInvoice({ keepForm: true });
+  emailOffice(invoice);
+}
+
+function saveAndPrintInvoice() {
+  if (!els.invoiceForm.reportValidity()) return;
+  const invoice = saveInvoice({ keepForm: true });
+  printInvoice(invoice);
 }
 
 function resetStopForm() {
@@ -632,18 +831,25 @@ function resetStopForm() {
 
 function saveInvoiceFromForm(event) {
   event.preventDefault();
+  saveInvoice();
+}
+
+function invoiceFromForm() {
   const items = lineItemsFromText(els.lineItemsText.value);
   const total = Number(els.invoiceTotal.value || els.invoiceAmount.value);
   const balanceDue = Number(els.balanceDue.value || total);
-  const invoice = {
+  return {
     id: els.invoiceId.value || crypto.randomUUID(),
     customer: els.customerName.value.trim(),
+    customerEmail: els.customerEmail.value.trim(),
     address: els.serviceAddress.value.trim(),
     number: els.invoiceNumber.value.trim(),
     amount: balanceDue,
     invoiceDate: els.issueDate.value,
     terms: els.invoiceTerms.value.trim(),
     poNumber: els.poNumber.value.trim(),
+    charge: els.invoiceCharge.value.trim(),
+    cash: els.invoiceCash.value.trim(),
     rep: els.invoiceRep.value.trim(),
     specialInstructions: els.specialInstructions.value.trim(),
     mainPhone: els.mainPhone.value.trim(),
@@ -653,14 +859,20 @@ function saveInvoiceFromForm(event) {
     customerTotalBalance: Number(els.customerTotalBalance.value || 0),
     total,
     paymentsCredits: Number(els.paymentsCredits.value || 0),
-    balanceDue
+    balanceDue,
+    customerSignature: getSignatureData()
   };
+}
+
+function saveInvoice({ keepForm = false } = {}) {
+  const invoice = invoiceFromForm();
   const index = state.invoices.findIndex((item) => item.id === invoice.id);
   if (index >= 0) state.invoices[index] = invoice;
   else state.invoices.unshift(invoice);
   saveState();
-  resetInvoiceForm();
+  if (!keepForm) resetInvoiceForm();
   render();
+  return invoice;
 }
 
 function saveStopFromForm(event) {
@@ -682,11 +894,28 @@ function saveStopFromForm(event) {
   render();
 }
 
+function saveOfficeSettings() {
+  state.settings = state.settings || {};
+  state.settings.officeEmail = els.officeEmail.value.trim();
+  state.settings.ryanEmail = els.ryanEmail.value.trim();
+  saveState();
+  alert("Office emails saved.");
+}
+
 function attachEvents() {
   document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tab)));
   document.querySelectorAll("[data-tab-jump]").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tabJump)));
   els.invoiceForm.addEventListener("submit", saveInvoiceFromForm);
   els.clearInvoiceForm.addEventListener("click", resetInvoiceForm);
+  els.clearSignature.addEventListener("click", clearSignaturePad);
+  els.saveAndPrintInvoice.addEventListener("click", saveAndPrintInvoice);
+  els.saveAndShareInvoice.addEventListener("click", saveAndShareInvoice);
+  els.addOrderItem.addEventListener("click", addOrderItem);
+  els.itemQty.addEventListener("input", updateItemAmount);
+  els.itemRate.addEventListener("input", updateItemAmount);
+  els.lineItemsText.addEventListener("input", updateTotalsFromLineItems);
+  els.invoiceTotal.addEventListener("input", updateBalanceDue);
+  els.paymentsCredits.addEventListener("input", updateBalanceDue);
   els.invoiceSearch.addEventListener("input", renderInvoices);
   els.invoiceFilter.addEventListener("change", renderInvoices);
   els.stopForm.addEventListener("submit", saveStopFromForm);
@@ -698,6 +927,7 @@ function attachEvents() {
   els.exportData.addEventListener("click", exportData);
   els.importData.addEventListener("change", importData);
   els.resetData.addEventListener("click", resetData);
+  els.saveOfficeSettings.addEventListener("click", saveOfficeSettings);
   els.invoiceFiles.addEventListener("change", handlePhotoSelection);
   els.invoiceCamera.addEventListener("change", handlePhotoSelection);
   els.processPhotos.addEventListener("click", processPhotos);
@@ -707,8 +937,16 @@ function attachEvents() {
   document.addEventListener("click", (event) => {
     const editInvoice = event.target.closest("[data-edit-invoice]");
     const deleteInvoice = event.target.closest("[data-delete-invoice]");
+    const emailInvoice = event.target.closest("[data-email-invoice]");
+    const officeInvoice = event.target.closest("[data-office-invoice]");
+    const shareInvoice = event.target.closest("[data-share-invoice]");
+    const printInvoice = event.target.closest("[data-print-invoice]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
     if (deleteInvoice) deleteInvoiceById(deleteInvoice.dataset.deleteInvoice);
+    if (emailInvoice) emailInvoiceById(emailInvoice.dataset.emailInvoice);
+    if (officeInvoice) emailOfficeById(officeInvoice.dataset.officeInvoice);
+    if (shareInvoice) shareInvoiceById(shareInvoice.dataset.shareInvoice);
+    if (printInvoice) printInvoiceById(printInvoice.dataset.printInvoice);
   });
 
   document.addEventListener("input", (event) => {
@@ -744,12 +982,15 @@ function editInvoiceById(id) {
   if (!invoice) return;
   els.invoiceId.value = invoice.id;
   els.customerName.value = invoice.customer;
+  els.customerEmail.value = invoice.customerEmail || "";
   els.serviceAddress.value = invoice.address || "";
   els.invoiceNumber.value = invoice.number;
   els.invoiceAmount.value = invoiceBalance(invoice);
   els.issueDate.value = invoiceDate(invoice);
   els.invoiceTerms.value = invoice.terms || "";
   els.poNumber.value = invoice.poNumber || "";
+  els.invoiceCharge.value = invoice.charge || "";
+  els.invoiceCash.value = invoice.cash || "";
   els.invoiceRep.value = invoice.rep || "";
   els.specialInstructions.value = invoice.specialInstructions || "";
   els.mainPhone.value = invoice.mainPhone || "";
@@ -760,6 +1001,7 @@ function editInvoiceById(id) {
   els.invoiceTotal.value = invoiceTotal(invoice) || "";
   els.paymentsCredits.value = invoice.paymentsCredits || "";
   els.balanceDue.value = invoiceBalance(invoice) || "";
+  loadSignature(invoice.customerSignature || "");
   els.invoiceFormTitle.textContent = "Edit Invoice";
   setTab("invoices");
 }
@@ -769,6 +1011,439 @@ function deleteInvoiceById(id) {
   state.invoices = state.invoices.filter((invoice) => invoice.id !== id);
   saveState();
   render();
+}
+
+function emailInvoiceById(id) {
+  const invoice = state.invoices.find((item) => item.id === id);
+  if (invoice) emailInvoice(invoice);
+}
+
+function emailOfficeById(id) {
+  const invoice = state.invoices.find((item) => item.id === id);
+  if (invoice) emailOffice(invoice);
+}
+
+async function shareInvoiceById(id) {
+  const invoice = state.invoices.find((item) => item.id === id);
+  if (!invoice) return;
+  const text = invoiceMessage(invoice);
+  if (navigator.share) {
+    try {
+      await navigator.share({
+        title: invoiceSubject(invoice),
+        text
+      });
+      return;
+    } catch {
+      // Fall back to copying when the share sheet is dismissed or unavailable.
+    }
+  }
+  await navigator.clipboard?.writeText(text);
+  alert("Invoice text copied. You can paste it into a text, email, or note.");
+}
+
+function printInvoiceById(id) {
+  const invoice = state.invoices.find((item) => item.id === id);
+  if (!invoice) return;
+  printInvoice(invoice);
+}
+
+function printInvoice(invoice) {
+  const win = window.open("", "_blank");
+  if (!win) {
+    alert("Pop-up blocking kept the print view from opening.");
+    return;
+  }
+  win.document.write(printableInvoiceHtml(invoice));
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+function officeRecipients() {
+  return [
+    state.settings?.officeEmail || sampleData.settings.officeEmail,
+    state.settings?.ryanEmail || sampleData.settings.ryanEmail
+  ].map((email) => String(email || "").trim()).filter(Boolean);
+}
+
+function emailOffice(invoice) {
+  const recipients = officeRecipients();
+  if (!recipients.length) {
+    alert("Add Lisa and Ryan's emails in Office first.");
+    setTab("settings");
+    return;
+  }
+  const params = new URLSearchParams({
+    subject: invoiceSubject(invoice),
+    body: invoiceMessage(invoice)
+  });
+  window.location.href = `mailto:${recipients.map(encodeURIComponent).join(",")}?${params.toString()}`;
+}
+
+function emailInvoice(invoice) {
+  const customerEmail = invoice.customerEmail || "";
+  const officeEmails = officeRecipients();
+  const params = new URLSearchParams({
+    subject: invoiceSubject(invoice),
+    body: invoiceMessage(invoice)
+  });
+  if (officeEmails.length) params.set("cc", officeEmails.join(","));
+  window.location.href = `mailto:${encodeURIComponent(customerEmail)}?${params.toString()}`;
+}
+
+function invoiceSubject(invoice) {
+  return `Andoro & Sons Invoice ${invoice.number || ""}`.trim();
+}
+
+function invoiceMessage(invoice) {
+  const items = invoice.items?.length
+    ? invoice.items.map((item) => {
+      const qty = item.qty ? `${item.qty} ` : "";
+      const unit = item.unit ? `${item.unit} ` : "";
+      const amount = Number(item.amount || item.rate || 0);
+      const upc = item.upc ? ` UPC ${item.upc}` : "";
+      return `- ${qty}${unit}${item.description}${upc}: ${money.format(amount)}`;
+    }).join("\n")
+    : "- Order";
+  return [
+    "Andoro & Sons",
+    "",
+    `Invoice: ${invoice.number || ""}`,
+    `Date: ${formatDate(invoiceDate(invoice))}`,
+    `Customer: ${invoice.customer || ""}`,
+    invoice.address ? `Address: ${invoice.address}` : "",
+    invoice.terms ? `Terms: ${invoice.terms}` : "",
+    invoice.poNumber ? `P.O. No.: ${invoice.poNumber}` : "",
+    "",
+    "Items:",
+    items,
+    "",
+    `Total: ${money.format(invoiceTotal(invoice))}`,
+    `Payments/Credits: ${money.format(Number(invoice.paymentsCredits || 0))}`,
+    `Balance Due: ${money.format(invoiceBalance(invoice))}`,
+    `Customer Signed: ${invoice.customerSignature ? "Yes" : "No"}`,
+    invoice.specialInstructions ? `\nNotes:\n${invoice.specialInstructions}` : "",
+    "",
+    "Thank you,"
+  ].filter((line) => line !== "").join("\n");
+}
+
+function printableInvoiceHtml(invoice) {
+  const plainAmount = (value) => Number(value || 0).toFixed(2);
+  const rows = (invoice.items || []).map((item) => `
+    <tr>
+      <td>${escapeHtml(item.description || "")}${item.upc ? `<br><small>UPC ${escapeHtml(item.upc)}</small>` : ""}</td>
+      <td>${escapeHtml(item.qty || "")}</td>
+      <td>${escapeHtml(item.unit || "")}</td>
+      <td>${plainAmount(item.rate)}</td>
+      <td>${plainAmount(item.amount || item.rate)}</td>
+    </tr>
+  `).join("") || `<tr><td>Order</td><td></td><td></td><td></td><td>${plainAmount(invoiceTotal(invoice))}</td></tr>`;
+  const blankRows = Array.from({ length: Math.max(0, 22 - (invoice.items?.length || 1)) }, () => `
+    <tr class="blank-row"><td></td><td></td><td></td><td></td><td></td></tr>
+  `).join("");
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${escapeHtml(invoiceSubject(invoice))}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f1f1f1; color: #10251d; font-family: Arial, Helvetica, sans-serif; font-size: 12px; }
+    .sheet {
+      width: 8.5in;
+      min-height: 11in;
+      margin: 20px auto;
+      padding: 0.45in 0.5in 0.35in;
+      background: #fff;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+    }
+    :root { --green: #1f6d48; --green-light: #a8d3b4; --gray-row: #e7e7e2; --red: #9b1f38; }
+    .top {
+      display: grid;
+      grid-template-columns: 1.55in 2.5in 2.65in;
+      gap: 18px;
+      align-items: start;
+      min-height: 1.6in;
+    }
+    .logo-wrap { text-align: center; }
+    .logo { width: 1.12in; height: 0.88in; object-fit: contain; display: block; margin: 0 auto 2px; }
+    .tagline { font-family: Georgia, serif; font-size: 11px; font-weight: 700; color: #111; }
+    .address {
+      color: #0d3326;
+      font-size: 15px;
+      font-weight: 900;
+      line-height: 1.24;
+      padding-top: 0.45in;
+    }
+    .invoice-panel { padding-top: 0.17in; }
+    .invoice-title { text-align: right; font-size: 26px; font-weight: 900; margin: 0 0 5px; }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      border: 2px solid var(--green);
+      border-radius: 11px;
+      overflow: hidden;
+      text-align: center;
+      font-size: 13px;
+    }
+    .meta-grid .head { background: var(--green-light); font-weight: 900; border-bottom: 2px solid var(--green); }
+    .meta-grid div { padding: 7px 8px; border-right: 2px solid var(--green); min-height: 28px; }
+    .meta-grid div:nth-child(2n) { border-right: 0; }
+    .meta-grid .value { background: #f3f4ef; font-size: 14px; }
+    .upper {
+      display: grid;
+      grid-template-columns: 1fr 2.8in;
+      gap: 0.55in;
+      min-height: 1.38in;
+      margin-top: 0.18in;
+    }
+    .bill-label { margin-left: 0.36in; font-size: 13px; }
+    .bill-body { margin-top: 0.16in; margin-left: 0.18in; font-size: 17px; line-height: 1.18; white-space: pre-wrap; }
+    .instructions { padding-top: 0.02in; font-style: italic; font-size: 14px; line-height: 1.7; }
+    .instructions h2 { margin: 0 0 4px; font-size: 15px; color: #0d3326; font-style: italic; }
+    .instructions .row { display: grid; grid-template-columns: 0.92in 1fr; gap: 8px; }
+    .pre-table {
+      display: grid;
+      grid-template-columns: 1.5fr 1.35fr 1.05fr 1.1fr 0.95fr;
+      border: 2px solid var(--green);
+      border-bottom: 0;
+      margin-top: 0.15in;
+    }
+    .pre-table div {
+      min-height: 32px;
+      border-right: 2px solid var(--green);
+      border-bottom: 2px solid var(--green);
+      padding: 6px 8px;
+      text-align: center;
+      font-size: 14px;
+    }
+    .pre-table div:nth-child(5n) { border-right: 0; }
+    .pre-head {
+      background: var(--green-light);
+      font-weight: 900;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      border-left: 2px solid var(--green);
+      border-right: 2px solid var(--green);
+    }
+    th {
+      background: var(--green-light);
+      border-right: 2px solid var(--green);
+      border-bottom: 2px solid var(--green);
+      padding: 7px 6px;
+      font-size: 14px;
+      text-align: center;
+      font-weight: 900;
+    }
+    th:last-child, td:last-child { border-right: 0; }
+    td {
+      border-right: 2px solid var(--green);
+      height: 19px;
+      padding: 2px 6px;
+      vertical-align: top;
+      font-size: 14px;
+    }
+    tbody tr:nth-child(odd) td { background: var(--gray-row); }
+    th:nth-child(1), td:nth-child(1) { width: 44%; }
+    th:nth-child(2), td:nth-child(2) { width: 10%; text-align: right; }
+    th:nth-child(3), td:nth-child(3) { width: 10%; text-align: center; }
+    th:nth-child(4), td:nth-child(4),
+    th:nth-child(5), td:nth-child(5) { width: 18%; text-align: right; }
+    .blank-row td { color: transparent; }
+    .balance-row {
+      display: grid;
+      grid-template-columns: 1fr 2.45in;
+      border: 2px solid var(--green);
+      border-top: 0;
+    }
+    .customer-balance {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 22px 5px 14px;
+      color: var(--red);
+      font-size: 16px;
+      font-weight: 900;
+      border-right: 2px solid var(--green);
+    }
+    .totals { border-bottom: 0; }
+    .totals div {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 34px;
+      border-bottom: 2px solid var(--green);
+    }
+    .totals span,
+    .totals strong {
+      padding: 7px 9px;
+    }
+    .totals span {
+      font-weight: 900;
+      color: #0d3326;
+      font-size: 16px;
+    }
+    .totals strong {
+      text-align: right;
+      font-size: 15px;
+      color: #111;
+    }
+    .notice {
+      border-left: 2px solid var(--green);
+      border-right: 2px solid var(--green);
+      border-bottom: 2px solid var(--green);
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      padding: 8px 13px;
+      font-weight: 700;
+    }
+    .footer {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.9fr 1.7fr;
+      margin: 0 auto;
+      width: 88%;
+      border-left: 2px solid var(--green);
+      border-bottom: 2px solid var(--green);
+      text-align: center;
+      font-size: 13px;
+    }
+    .footer div { border-right: 2px solid var(--green); border-top: 2px solid var(--green); padding: 7px 6px; min-height: 30px; }
+    .footer .foot-head {
+      background: #edf3eb;
+      color: #0d3326;
+      font-style: italic;
+    }
+    .signature-copy {
+      margin-top: 10px;
+      width: 3.1in;
+      margin-left: auto;
+      border-bottom: 2px solid var(--green);
+      min-height: 0.72in;
+      display: grid;
+      align-items: end;
+      justify-items: center;
+      padding-bottom: 4px;
+    }
+    .signature-copy img {
+      max-width: 100%;
+      max-height: 0.58in;
+      object-fit: contain;
+    }
+    .signature-label {
+      width: 3.1in;
+      margin-left: auto;
+      padding-top: 3px;
+      text-align: center;
+      color: #0d3326;
+      font-weight: 900;
+    }
+    @media print {
+      body { background: #fff; }
+      .sheet {
+        margin: 0;
+        width: auto;
+        min-height: auto;
+        box-shadow: none;
+        padding: 0.35in 0.42in 0.25in;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="sheet">
+    <header class="top">
+      <section class="logo-wrap">
+        <img class="logo" src="assets/andoro-pizza-logo.jpg" alt="Andoro & Sons">
+        <div class="tagline">Tasting is Believing!</div>
+      </section>
+      <section class="address">
+        <div>2340 Appaloosa Trail</div>
+        <div>High Ridge, MO 63049</div>
+      </section>
+      <section class="invoice-panel">
+        <div class="invoice-title">Invoice</div>
+        <div class="meta-grid">
+          <div class="head">Date</div>
+          <div class="head">Invoice #</div>
+          <div class="value">${escapeHtml(formatDate(invoiceDate(invoice)))}</div>
+          <div class="value">${escapeHtml(invoice.number || "")}</div>
+        </div>
+      </section>
+    </header>
+
+    <section class="upper">
+      <section>
+        <div class="bill-label">Bill To</div>
+        <div class="bill-body">${escapeHtml(invoice.customer || "")}
+${escapeHtml(invoice.address || "")}
+${escapeHtml(invoice.customerEmail || "")}</div>
+      </section>
+      <section class="instructions">
+        <h2>Special Instructions:</h2>
+        <div class="row"><span>Main Tele</span><span>${escapeHtml(invoice.mainPhone || "")}</span></div>
+        <div class="row"><span>Alt Tele:</span><span>${escapeHtml(invoice.altPhone || "")}</span></div>
+        <div class="row"><span>D/T:</span><span>${escapeHtml(invoice.dt || "")}</span></div>
+        ${invoice.specialInstructions ? `<div>${escapeHtml(invoice.specialInstructions).replace(/\n/g, "<br>")}</div>` : ""}
+      </section>
+    </section>
+
+    <section class="pre-table">
+      <div class="pre-head">P.O. No.</div>
+      <div class="pre-head">Terms</div>
+      <div class="pre-head">Charge</div>
+      <div class="pre-head">Cash</div>
+      <div class="pre-head">Rep</div>
+      <div>${escapeHtml(invoice.poNumber || "")}</div>
+      <div>${escapeHtml(invoice.terms || "")}</div>
+      <div>${escapeHtml(invoice.charge || "")}</div>
+      <div>${escapeHtml(invoice.cash || "")}</div>
+      <div>${escapeHtml(invoice.rep || "")}</div>
+    </section>
+
+    <table>
+      <thead><tr><th>Description</th><th>Qty</th><th>U/M</th><th>Rate</th><th>Amount</th></tr></thead>
+      <tbody>${rows}${blankRows}</tbody>
+    </table>
+
+    <section class="balance-row">
+      <div>
+        <div class="customer-balance"><span>Customer Total Balance</span><span>${money.format(Number(invoice.customerTotalBalance || invoiceBalance(invoice)))}</span></div>
+      </div>
+      <div class="totals">
+        <div><span>Total</span><strong>${money.format(invoiceTotal(invoice))}</strong></div>
+        <div><span>Payments/Credits</span><strong>${money.format(Number(invoice.paymentsCredits || 0))}</strong></div>
+        <div class="due"><span>Balance Due</span><strong>${money.format(invoiceBalance(invoice))}</strong></div>
+      </div>
+    </section>
+
+    <section class="notice">A CHARGE OF $40 WILL BE MADE FOR ANY CHECK RETURNED BY YOUR BANK FOR ANY REASON.</section>
+
+    <section>
+      <div class="signature-copy">
+        ${invoice.customerSignature ? `<img src="${escapeAttribute(invoice.customerSignature)}" alt="Customer signature">` : ""}
+      </div>
+      <div class="signature-label">Customer Signature</div>
+    </section>
+
+    <section class="footer">
+      <div class="foot-head">Phone #</div>
+      <div class="foot-head">Fax #</div>
+      <div class="foot-head">E-mail</div>
+      <div class="foot-head">Web Site</div>
+      <div>6363329005</div>
+      <div>1-800-657-0467</div>
+      <div>andoropizza@yahoo.com</div>
+      <div>www.andoropizza.com</div>
+    </section>
+  </main>
+</body>
+</html>`;
 }
 
 function useCurrentLocation() {
@@ -975,6 +1650,7 @@ function saveScannedInvoices() {
   const invoices = accepted.map((scan) => ({
     id: crypto.randomUUID(),
     customer: scan.customer || "Unknown customer",
+    customerEmail: scan.customerEmail || "",
     address: scan.address || "",
     number: scan.number || `SCAN-${Date.now()}`,
     amount: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
@@ -1002,6 +1678,7 @@ function saveScannedInvoices() {
 }
 
 attachEvents();
+setupSignaturePad();
 resetInvoiceForm();
 resetStopForm();
 render();

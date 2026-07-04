@@ -261,6 +261,39 @@ textarea {
   gap: 12px;
 }
 
+.signature-pad {
+  display: grid;
+  gap: 8px;
+}
+
+.product-picker {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfc;
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+.signature-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-weight: 800;
+}
+
+#customerSignaturePad {
+  width: 100%;
+  height: 150px;
+  border: 1px solid #cbd5df;
+  border-radius: 8px;
+  background:
+    linear-gradient(to bottom, transparent 0, transparent 108px, #d9e2ec 109px, transparent 110px),
+    #fff;
+  touch-action: none;
+}
+
 button,
 .file-button,
 .map-link {
