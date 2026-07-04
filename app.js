@@ -1,4 +1,6 @@
 const STORAGE_KEY = "andoro_invoice_route_desk_v2";
+const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
+const ACCESS_CODE = "andoro1957";
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const dateFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -188,6 +190,10 @@ let selectedFiles = [];
 let signatureIsBlank = true;
 
 const els = {
+  accessScreen: document.querySelector("#accessScreen"),
+  accessForm: document.querySelector("#accessForm"),
+  accessCode: document.querySelector("#accessCode"),
+  accessError: document.querySelector("#accessError"),
   todayLabel: document.querySelector("#todayLabel"),
   openBalance: document.querySelector("#openBalance"),
   openInvoiceCount: document.querySelector("#openInvoiceCount"),
@@ -272,6 +278,33 @@ const els = {
   scanSummary: document.querySelector("#scanSummary"),
   saveScannedInvoices: document.querySelector("#saveScannedInvoices")
 };
+
+function normalizeAccessCode(value = "") {
+  return String(value).trim().toLowerCase();
+}
+
+function unlockApp() {
+  document.body.classList.remove("access-locked");
+  els.accessError.textContent = "";
+}
+
+function setupAccessGate() {
+  if (localStorage.getItem(ACCESS_STORAGE_KEY) === "yes") {
+    unlockApp();
+    return;
+  }
+  els.accessCode.focus();
+  els.accessForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (normalizeAccessCode(els.accessCode.value) === ACCESS_CODE) {
+      localStorage.setItem(ACCESS_STORAGE_KEY, "yes");
+      unlockApp();
+      return;
+    }
+    els.accessError.textContent = "Wrong code.";
+    els.accessCode.select();
+  });
+}
 
 function todayOffset(days) {
   const date = new Date();
@@ -2143,6 +2176,7 @@ function saveScannedInvoices() {
   setTab("invoices");
 }
 
+setupAccessGate();
 attachEvents();
 setupSignaturePad();
 resetInvoiceForm();

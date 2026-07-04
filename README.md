@@ -11,6 +11,7 @@ A phone-friendly invoice and route planning app for Andoro & Sons.
 - Shows that store's available products with ordered quantity set to `0` by default.
 - Lets pizza quantities move by full cases: `12`, `24`, `36`, and so on.
 - Adds a delivery fee automatically, defaulting to `$10.00` unless changed.
+- Requires a simple access code before opening the form.
 - Adds products manually with optional UPC, quantity, unit, rate, and amount.
 - Opens a customer copy that can be printed or saved as a PDF before leaving.
 - Captures the customer's digital signature on the invoice.

@@ -11,7 +11,19 @@
     <link rel="apple-touch-icon" href="assets/icon-192.png">
     <link rel="stylesheet" href="styles.css">
   </head>
-  <body>
+  <body class="access-locked">
+    <section class="access-screen" id="accessScreen" aria-label="Access code">
+      <form class="access-card" id="accessForm">
+        <img src="assets/andoro-pizza-logo.jpg" alt="Andoro & Sons Pizza logo">
+        <h1>Invoice Order Form</h1>
+        <label>
+          Access code
+          <input id="accessCode" autocomplete="off" inputmode="text" type="password" required>
+        </label>
+        <button class="primary-button" type="submit">Unlock</button>
+        <span id="accessError" role="alert"></span>
+      </form>
+    </section>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -442,7 +454,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=16"></script>
+    <script src="app.js?v=17"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
