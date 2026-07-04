@@ -7,6 +7,7 @@ A phone-friendly invoice and route planning app for Andoro & Sons.
 - Lets salespeople fill out an Andoro invoice digitally instead of handwriting it.
 - Works as an order form for any customer, not just one route.
 - Lets the salesperson select a saved store or save a new store from the invoice screen.
+- Shows that store's available products with ordered quantity set to `0` by default.
 - Adds products manually with optional UPC, quantity, unit, rate, and amount.
 - Opens a customer copy that can be printed or saved as a PDF before leaving.
 - Captures the customer's digital signature on the invoice.
@@ -17,10 +18,11 @@ A phone-friendly invoice and route planning app for Andoro & Sons.
 
 1. Open `Office` and save Lisa and Ryan's email addresses once.
 2. Select the store, or enter a new store and tap `Save store`.
-3. Add each product with description, optional UPC, quantity, unit, rate, and amount.
-4. Have the customer sign in the signature box.
-5. Tap `Print customer copy` before leaving.
-6. Tap `Send to Office` to email Lisa and Ryan the office copy.
+3. Set quantities for the store's available products. Leave unordered products at `0`.
+4. Add any missing product manually; saving the invoice teaches that product to the store.
+5. Have the customer sign in the signature box.
+6. Tap `Print customer copy` before leaving.
+7. Tap `Send to Office` to email Lisa and Ryan the office copy.
 
 ## Run Locally
 

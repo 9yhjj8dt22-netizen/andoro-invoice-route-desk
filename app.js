@@ -3,62 +3,8 @@ const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD
 const dateFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 const sampleData = {
-  invoices: [
-    {
-      id: crypto.randomUUID(),
-      customer: "North Lake Supply",
-      customerEmail: "",
-      address: "100 N LaSalle St, Chicago, IL",
-      number: "INV-1001",
-      amount: 842.5,
-      invoiceDate: todayOffset(-8),
-      terms: "Net 10",
-      poNumber: "",
-      rep: "LC",
-      specialInstructions: "Morning delivery",
-      items: [{ description: "Delivery order", qty: 1, unit: "CS", rate: 842.5, amount: 842.5 }],
-      customerTotalBalance: 0,
-      total: 842.5,
-      paymentsCredits: 0,
-      balanceDue: 842.5
-    },
-    {
-      id: crypto.randomUUID(),
-      customer: "Riverbend Builders",
-      customerEmail: "",
-      address: "233 S Wacker Dr, Chicago, IL",
-      number: "INV-1002",
-      amount: 1260,
-      invoiceDate: todayOffset(-28),
-      terms: "Net 10",
-      poNumber: "",
-      rep: "LC",
-      specialInstructions: "Call before arrival",
-      items: [{ description: "Delivery order", qty: 1, unit: "CS", rate: 1260, amount: 1260 }],
-      customerTotalBalance: 0,
-      total: 1260,
-      paymentsCredits: 0,
-      balanceDue: 1260
-    }
-  ],
-  stops: [
-    {
-      id: crypto.randomUUID(),
-      name: "North Lake Supply",
-      address: "100 N LaSalle St, Chicago, IL",
-      lat: 41.8836,
-      lng: -87.6325,
-      priority: "normal"
-    },
-    {
-      id: crypto.randomUUID(),
-      name: "Riverbend Builders",
-      address: "233 S Wacker Dr, Chicago, IL",
-      lat: 41.8791,
-      lng: -87.6358,
-      priority: "high"
-    }
-  ],
+  invoices: [],
+  stops: [],
   optimizedStopIds: [],
   origin: { lat: 41.8781, lng: -87.6298 },
   scans: [],
@@ -87,6 +33,7 @@ const els = {
   invoiceFormTitle: document.querySelector("#invoiceFormTitle"),
   storeSelect: document.querySelector("#storeSelect"),
   saveStore: document.querySelector("#saveStore"),
+  storeProductList: document.querySelector("#storeProductList"),
   customerName: document.querySelector("#customerName"),
   customerEmail: document.querySelector("#customerEmail"),
   serviceAddress: document.querySelector("#serviceAddress"),
@@ -168,14 +115,27 @@ function loadState() {
   if (!saved) return structuredClone(sampleData);
   try {
     const parsed = JSON.parse(saved);
-    return {
+    return normalizeState({
       ...structuredClone(sampleData),
       ...parsed,
       settings: { ...structuredClone(sampleData.settings), ...(parsed.settings || {}) }
-    };
+    });
   } catch {
     return structuredClone(sampleData);
   }
+}
+
+function normalizeState(nextState) {
+  nextState.invoices = (nextState.invoices || []).filter((invoice) => !isDemoInvoice(invoice));
+  nextState.stops = (nextState.stops || []).filter((stop) => !["North Lake Supply", "Riverbend Builders"].includes(stop.name));
+  nextState.stores = nextState.stores || [];
+  nextState.invoices.forEach((invoice) => mergeStoreFromInvoice(nextState, invoice));
+  return nextState;
+}
+
+function isDemoInvoice(invoice) {
+  return ["North Lake Supply", "Riverbend Builders"].includes(invoice.customer)
+    && ["INV-1001", "INV-1002"].includes(invoice.number);
 }
 
 function saveState() {
@@ -253,6 +213,127 @@ function renderStores() {
     els.storeSelect.append(option);
   });
   els.storeSelect.value = stores.some((store) => store.id === selected) ? selected : "";
+  renderStoreProducts();
+}
+
+function selectedStore() {
+  return (state.stores || []).find((store) => store.id === els.storeSelect.value);
+}
+
+function productKey(product = {}) {
+  const upc = String(product.upc || "").trim().toLowerCase();
+  if (upc) return `upc:${upc}`;
+  return `desc:${String(product.description || "").trim().toLowerCase()}|${String(product.unit || "").trim().toLowerCase()}`;
+}
+
+function normalizeProduct(item = {}) {
+  return {
+    id: productKey(item) || crypto.randomUUID(),
+    description: String(item.description || "").trim(),
+    upc: String(item.upc || "").trim(),
+    unit: String(item.unit || "ea").trim() || "ea",
+    rate: Number(item.rate || 0)
+  };
+}
+
+function mergeProducts(products = [], items = []) {
+  const byKey = new Map(products.map((product) => [productKey(product), normalizeProduct(product)]));
+  items.forEach((item) => {
+    if (!item.description) return;
+    const product = normalizeProduct(item);
+    const key = productKey(product);
+    const existing = byKey.get(key) || {};
+    byKey.set(key, {
+      ...existing,
+      ...product,
+      rate: Number(product.rate || existing.rate || 0)
+    });
+  });
+  return [...byKey.values()].sort((a, b) => a.description.localeCompare(b.description));
+}
+
+function mergeStoreFromInvoice(targetState, invoice) {
+  if (!invoice?.customer) return;
+  targetState.stores = targetState.stores || [];
+  const existing = targetState.stores.find((store) => store.name.toLowerCase() === invoice.customer.toLowerCase());
+  const store = {
+    id: existing?.id || crypto.randomUUID(),
+    name: invoice.customer,
+    email: invoice.customerEmail || existing?.email || "",
+    address: invoice.address || existing?.address || "",
+    terms: invoice.terms || existing?.terms || "",
+    mainPhone: invoice.mainPhone || existing?.mainPhone || "",
+    altPhone: invoice.altPhone || existing?.altPhone || "",
+    dt: invoice.dt || existing?.dt || "",
+    specialInstructions: invoice.specialInstructions || existing?.specialInstructions || "",
+    products: mergeProducts(existing?.products || [], invoice.items || [])
+  };
+  const index = targetState.stores.findIndex((item) => item.id === store.id);
+  if (index >= 0) targetState.stores[index] = store;
+  else targetState.stores.push(store);
+}
+
+function currentOrderMap() {
+  return new Map(lineItemsFromText(els.lineItemsText.value).map((item) => [productKey(item), item]));
+}
+
+function renderStoreProducts() {
+  els.storeProductList.replaceChildren();
+  const store = selectedStore();
+  if (!store) {
+    els.storeProductList.innerHTML = `<div class="muted">Select a store to show its available products.</div>`;
+    return;
+  }
+  const products = store.products || [];
+  if (!products.length) {
+    els.storeProductList.innerHTML = `<div class="muted">No products saved for this store yet. Add products below, then save the invoice.</div>`;
+    return;
+  }
+  const current = currentOrderMap();
+  const title = document.createElement("div");
+  title.className = "store-products-title";
+  title.textContent = "Available products for this store";
+  els.storeProductList.append(title);
+  products.forEach((product) => {
+    const key = productKey(product);
+    const item = current.get(key);
+    const qty = item?.qty ?? "0";
+    const row = document.createElement("div");
+    row.className = "store-product-row";
+    row.innerHTML = `
+      <div>
+        <strong>${escapeHtml(product.description)}</strong>
+        <span>${product.upc ? `UPC ${escapeHtml(product.upc)} - ` : ""}${escapeHtml(product.unit || "ea")} - ${money.format(Number(product.rate || 0))}</span>
+      </div>
+      <label>
+        Qty
+        <input data-store-product="${escapeAttribute(key)}" inputmode="decimal" min="0" step="0.01" type="number" value="${escapeAttribute(qty)}">
+      </label>
+    `;
+    els.storeProductList.append(row);
+  });
+}
+
+function updateOrderFromStoreProducts() {
+  const store = selectedStore();
+  if (!store) return;
+  const rows = [...els.storeProductList.querySelectorAll("[data-store-product]")];
+  const qtyByKey = new Map(rows.map((input) => [input.dataset.storeProduct, input.value || "0"]));
+  const items = (store.products || []).map((product) => {
+    const qty = qtyByKey.get(productKey(product)) || "0";
+    const rate = Number(product.rate || 0);
+    const amount = Number(qty || 0) * rate;
+    return {
+      description: product.description,
+      upc: product.upc || "",
+      qty,
+      unit: product.unit || "ea",
+      rate,
+      amount
+    };
+  });
+  els.lineItemsText.value = lineItemsToText(items);
+  updateTotalsFromLineItems();
 }
 
 function renderAttention() {
@@ -707,6 +788,11 @@ function addOrderItem() {
     rate,
     amount
   };
+  const store = selectedStore();
+  if (store) {
+    store.products = mergeProducts(store.products || [], [item]);
+    saveState();
+  }
   const current = els.lineItemsText.value.trim();
   els.lineItemsText.value = [current, lineItemsToText([item])].filter(Boolean).join("\n");
   els.itemDescription.value = "";
@@ -716,14 +802,14 @@ function addOrderItem() {
   els.itemAmount.value = "";
   els.itemDescription.focus();
   updateTotalsFromLineItems();
+  renderStoreProducts();
+  if (store) updateOrderFromStoreProducts();
 }
 
 function updateTotalsFromLineItems() {
   const total = lineItemsFromText(els.lineItemsText.value).reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  if (total > 0) {
-    els.invoiceTotal.value = total.toFixed(2);
-    els.invoiceAmount.value = total.toFixed(2);
-  }
+  els.invoiceTotal.value = total ? total.toFixed(2) : "";
+  els.invoiceAmount.value = total ? total.toFixed(2) : "";
   updateBalanceDue();
 }
 
@@ -834,6 +920,7 @@ function resetInvoiceForm() {
 }
 
 function storeFromForm(existingId = "") {
+  const existing = (state.stores || []).find((store) => store.id === existingId);
   return {
     id: existingId || crypto.randomUUID(),
     name: els.customerName.value.trim(),
@@ -843,7 +930,8 @@ function storeFromForm(existingId = "") {
     mainPhone: els.mainPhone.value.trim(),
     altPhone: els.altPhone.value.trim(),
     dt: els.invoiceDt.value.trim(),
-    specialInstructions: els.specialInstructions.value.trim()
+    specialInstructions: els.specialInstructions.value.trim(),
+    products: existing?.products || []
   };
 }
 
@@ -877,6 +965,18 @@ function loadSelectedStore() {
   els.altPhone.value = store.altPhone || "";
   els.invoiceDt.value = store.dt || "";
   els.specialInstructions.value = store.specialInstructions || "";
+  if (!els.invoiceId.value) {
+    els.lineItemsText.value = lineItemsToText((store.products || []).map((product) => ({
+      description: product.description,
+      upc: product.upc || "",
+      qty: "0",
+      unit: product.unit || "ea",
+      rate: Number(product.rate || 0),
+      amount: 0
+    })));
+    updateTotalsFromLineItems();
+  }
+  renderStoreProducts();
 }
 
 function saveAndShareInvoice() {
@@ -946,25 +1046,11 @@ function saveInvoice({ keepForm = false } = {}) {
 
 function upsertStoreFromInvoice(invoice) {
   if (!invoice.customer) return;
-  state.stores = state.stores || [];
   const selectedId = els.storeSelect.value;
-  const existing = state.stores.find((store) => store.id === selectedId)
-    || state.stores.find((store) => store.name.toLowerCase() === invoice.customer.toLowerCase());
-  const store = {
-    id: existing?.id || crypto.randomUUID(),
-    name: invoice.customer,
-    email: invoice.customerEmail || "",
-    address: invoice.address || "",
-    terms: invoice.terms || "",
-    mainPhone: invoice.mainPhone || "",
-    altPhone: invoice.altPhone || "",
-    dt: invoice.dt || "",
-    specialInstructions: invoice.specialInstructions || ""
-  };
-  const index = state.stores.findIndex((item) => item.id === store.id);
-  if (index >= 0) state.stores[index] = store;
-  else state.stores.push(store);
-  els.storeSelect.value = store.id;
+  mergeStoreFromInvoice(state, invoice);
+  const store = (state.stores || []).find((item) => item.id === selectedId)
+    || (state.stores || []).find((item) => item.name.toLowerCase() === invoice.customer.toLowerCase());
+  if (store) els.storeSelect.value = store.id;
 }
 
 function saveStopFromForm(event) {
@@ -1044,6 +1130,10 @@ function attachEvents() {
   });
 
   document.addEventListener("input", (event) => {
+    if (event.target.matches("[data-store-product]")) {
+      updateOrderFromStoreProducts();
+      return;
+    }
     const field = event.target.dataset.scanField;
     const id = event.target.dataset.scanId;
     if (!field || !id) return;
@@ -1769,6 +1859,7 @@ function saveScannedInvoices() {
     sourceFile: scan.fileName || ""
   }));
   state.invoices.unshift(...invoices);
+  invoices.forEach((invoice) => mergeStoreFromInvoice(state, invoice));
   saveState();
   render();
   setTab("invoices");

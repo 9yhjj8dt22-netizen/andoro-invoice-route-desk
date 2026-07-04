@@ -275,6 +275,42 @@ textarea {
   gap: 12px;
 }
 
+.store-products {
+  display: grid;
+  gap: 8px;
+}
+
+.store-products-title {
+  color: var(--green-dark);
+  font-weight: 900;
+  font-size: 0.9rem;
+}
+
+.store-product-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 88px;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.store-product-row strong,
+.store-product-row span {
+  display: block;
+}
+
+.store-product-row span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.store-product-row label {
+  font-size: 0.78rem;
+}
+
 .signature-heading {
   display: flex;
   justify-content: space-between;
