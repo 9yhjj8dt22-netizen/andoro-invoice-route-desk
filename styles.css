@@ -288,7 +288,7 @@ textarea {
 
 .store-product-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 88px;
+  grid-template-columns: minmax(0, 1fr) minmax(150px, 190px);
   gap: 10px;
   align-items: center;
   border: 1px solid var(--line);
@@ -307,8 +307,41 @@ textarea {
   font-size: 0.82rem;
 }
 
+.case-note {
+  margin-top: 3px;
+}
+
 .store-product-row label {
   font-size: 0.78rem;
+}
+
+.qty-cell {
+  display: grid;
+  grid-template-columns: 1fr 82px 1fr;
+  gap: 6px;
+  align-items: end;
+}
+
+.qty-cell label {
+  min-width: 0;
+}
+
+.qty-cell input {
+  text-align: center;
+}
+
+.case-button {
+  min-height: 40px;
+  padding: 8px 7px;
+  border-color: var(--line);
+  background: #e8f2ed;
+  color: var(--green-dark);
+  font-size: 0.78rem;
+}
+
+.shelf-count {
+  grid-column: 1 / -1;
+  text-align: center;
 }
 
 .signature-heading {
@@ -676,6 +709,14 @@ th {
 
   .metric-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .store-product-row {
+    grid-template-columns: 1fr;
+  }
+
+  .qty-cell {
+    grid-template-columns: 1fr 92px 1fr;
   }
 }
 

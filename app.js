@@ -66,6 +66,8 @@ const hyVeeProducts = [
 
 const delivery10 = catalogItem("Delivery Charge", "", 10);
 const delivery15 = catalogItem("Delivery Charge", "", 15);
+const PIZZAS_PER_CASE = 12;
+const CASES_PER_SHELF = 2;
 
 const sampleData = {
   invoices: [],
@@ -467,6 +469,29 @@ function currentOrderMap() {
   return new Map(lineItemsFromText(els.lineItemsText.value).map((item) => [productKey(item), item]));
 }
 
+function productCaseSize(product = {}) {
+  return /pizza/i.test(product.description || "") ? PIZZAS_PER_CASE : 1;
+}
+
+function productShelfLabel(qty, caseSize) {
+  if (caseSize <= 1) return "";
+  const cases = Number(qty || 0) / caseSize;
+  const shelves = cases / CASES_PER_SHELF;
+  const caseText = `${cases.toFixed(cases % 1 === 0 ? 0 : 1)} case${cases === 1 ? "" : "s"}`;
+  const shelfText = `${shelves.toFixed(shelves % 1 === 0 ? 0 : 1)} ${shelves === 1 ? "shelf" : "shelves"}`;
+  return `${caseText} / ${shelfText}`;
+}
+
+function adjustStoreProductQty(button) {
+  const input = [...els.storeProductList.querySelectorAll("[data-store-product]")]
+    .find((field) => field.dataset.storeProduct === button.dataset.caseKey);
+  if (!input) return;
+  const increment = Number(button.dataset.caseIncrement || PIZZAS_PER_CASE);
+  const nextValue = Math.max(0, Number(input.value || 0) + increment);
+  input.value = String(nextValue);
+  updateOrderFromStoreProducts();
+}
+
 function renderStoreProducts() {
   els.storeProductList.replaceChildren();
   const store = selectedStore();
@@ -488,17 +513,29 @@ function renderStoreProducts() {
     const key = productKey(product);
     const item = current.get(key);
     const qty = item?.qty ?? "0";
+    const caseSize = productCaseSize(product);
+    const shelfLabel = productShelfLabel(qty, caseSize);
     const row = document.createElement("div");
     row.className = "store-product-row";
     row.innerHTML = `
       <div>
         <strong>${escapeHtml(product.description)}</strong>
         <span>${product.upc ? `UPC ${escapeHtml(product.upc)} - ` : ""}${escapeHtml(product.unit || "ea")} - ${money.format(Number(product.rate || 0))}</span>
+        ${caseSize > 1 ? `<span class="case-note">1 case = ${caseSize}; 2 cases per shelf</span>` : ""}
       </div>
-      <label>
-        Qty
-        <input data-store-product="${escapeAttribute(key)}" inputmode="decimal" min="0" step="0.01" type="number" value="${escapeAttribute(qty)}">
-      </label>
+      <div class="qty-cell">
+        ${caseSize > 1 ? `
+          <button class="case-button" data-case-key="${escapeAttribute(key)}" data-case-increment="-${caseSize}" type="button">- Case</button>
+        ` : ""}
+        <label>
+          Qty
+          <input data-store-product="${escapeAttribute(key)}" data-case-size="${caseSize}" inputmode="decimal" min="0" step="${caseSize > 1 ? caseSize : "0.01"}" type="number" value="${escapeAttribute(qty)}">
+        </label>
+        ${caseSize > 1 ? `
+          <button class="case-button" data-case-key="${escapeAttribute(key)}" data-case-increment="${caseSize}" type="button">+ Case</button>
+          <span class="shelf-count">${escapeHtml(shelfLabel)}</span>
+        ` : ""}
+      </div>
     `;
     els.storeProductList.append(row);
   });
@@ -509,6 +546,10 @@ function updateOrderFromStoreProducts() {
   if (!store) return;
   const rows = [...els.storeProductList.querySelectorAll("[data-store-product]")];
   const qtyByKey = new Map(rows.map((input) => [input.dataset.storeProduct, input.value || "0"]));
+  rows.forEach((input) => {
+    const label = input.closest(".qty-cell")?.querySelector(".shelf-count");
+    if (label) label.textContent = productShelfLabel(input.value, Number(input.dataset.caseSize || 1));
+  });
   const items = (store.products || []).map((product) => {
     const qty = qtyByKey.get(productKey(product)) || "0";
     const rate = Number(product.rate || 0);
@@ -1316,12 +1357,14 @@ function attachEvents() {
     const officeInvoice = event.target.closest("[data-office-invoice]");
     const shareInvoice = event.target.closest("[data-share-invoice]");
     const printInvoice = event.target.closest("[data-print-invoice]");
+    const caseButton = event.target.closest("[data-case-key]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
     if (deleteInvoice) deleteInvoiceById(deleteInvoice.dataset.deleteInvoice);
     if (emailInvoice) emailInvoiceById(emailInvoice.dataset.emailInvoice);
     if (officeInvoice) emailOfficeById(officeInvoice.dataset.officeInvoice);
     if (shareInvoice) shareInvoiceById(shareInvoice.dataset.shareInvoice);
     if (printInvoice) printInvoiceById(printInvoice.dataset.printInvoice);
+    if (caseButton) adjustStoreProductQty(caseButton);
   });
 
   document.addEventListener("input", (event) => {
