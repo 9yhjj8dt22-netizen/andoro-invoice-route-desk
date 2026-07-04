@@ -82,8 +82,8 @@ const sampleData = {
     {
       id: "store-mosers-ashland",
       name: "Mosers Foods - Ashland",
-      orderBlocked: true,
-      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
+      orderBlocked: false,
+      orderBlockedReason: "",
       address: "Amy-Frozen Food Mgr\n109 Eastside Dr.\nAshland, MO 65010",
       terms: "Net 10",
       rep: "RRM",
@@ -92,8 +92,8 @@ const sampleData = {
     {
       id: "store-mosers-fulton",
       name: "Mosers Foods- Fulton",
-      orderBlocked: true,
-      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
+      orderBlocked: false,
+      orderBlockedReason: "",
       address: "2020 N. Bluff\nFulton, MO 65251",
       terms: "Net 10",
       rep: "RRM",
@@ -102,6 +102,8 @@ const sampleData = {
     {
       id: "store-hyvee-osage-beach",
       name: "Hy-Vee (Osage Beach)",
+      orderBlocked: false,
+      orderBlockedReason: "",
       address: "997 Barry Prewitt Memorial DR\nOsage Beach, MO 65065",
       poNumber: "Using as Order Form",
       rep: "LC",
@@ -124,8 +126,8 @@ const sampleData = {
     {
       id: "store-woods-sunrise-beach",
       name: "Woods Supermarket- Sunrise Beach",
-      orderBlocked: true,
-      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
+      orderBlocked: false,
+      orderBlockedReason: "",
       address: "13655 N State Highway 5\nSunrise Beach, MO 65079",
       rep: "RRM",
       products: [...standardTwelveInch, delivery10]
@@ -150,6 +152,8 @@ const sampleData = {
     {
       id: "store-hyvee-columbia-nifong",
       name: "Hy-Vee (Columbia- Nifong)",
+      orderBlocked: false,
+      orderBlockedReason: "",
       address: "405 E. Nifong Blvd.\nColumbia, MO 65201",
       rep: "RRM",
       products: hyVeeProducts
@@ -157,6 +161,8 @@ const sampleData = {
     {
       id: "store-hyvee-columbia-1082",
       name: "Hy-Vee (Columbia) #1082",
+      orderBlocked: false,
+      orderBlockedReason: "",
       address: "Brian Hayes Frozen Food Mgr\n25 Conley Road\nColumbia, MO 65201",
       products: [
         catalog.pepperoni12,
@@ -509,6 +515,7 @@ function mergeProducts(products = [], items = []) {
 
 function mergeStores(baseStores = [], incomingStores = []) {
   const byName = new Map();
+  const hasOwn = (item, key) => Object.prototype.hasOwnProperty.call(item, key);
   baseStores.forEach((store) => {
     if (!store?.name) return;
     byName.set(store.name.toLowerCase(), {
@@ -520,10 +527,13 @@ function mergeStores(baseStores = [], incomingStores = []) {
     if (!store?.name) return;
     const key = store.name.toLowerCase();
     const existing = byName.get(key) || {};
+    const seededOrderRule = hasOwn(existing, "orderBlocked");
     byName.set(key, {
       ...existing,
       ...store,
       id: existing.id || store.id || crypto.randomUUID(),
+      orderBlocked: seededOrderRule ? existing.orderBlocked : Boolean(store.orderBlocked),
+      orderBlockedReason: seededOrderRule ? existing.orderBlockedReason || "" : store.orderBlockedReason || "",
       products: mergeProducts(existing.products || [], store.products || [])
     });
   });
