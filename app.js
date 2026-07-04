@@ -68,6 +68,7 @@ const delivery10 = catalogItem("Delivery Charge", "", 10);
 const delivery15 = catalogItem("Delivery Charge", "", 15);
 const PIZZAS_PER_CASE = 12;
 const CASES_PER_SHELF = 2;
+const DEFAULT_DELIVERY_FEE = 10;
 
 const sampleData = {
   invoices: [],
@@ -224,6 +225,7 @@ const els = {
   itemAmount: document.querySelector("#itemAmount"),
   addOrderItem: document.querySelector("#addOrderItem"),
   lineItemsText: document.querySelector("#lineItemsText"),
+  deliveryFee: document.querySelector("#deliveryFee"),
   customerTotalBalance: document.querySelector("#customerTotalBalance"),
   invoiceTotal: document.querySelector("#invoiceTotal"),
   paymentsCredits: document.querySelector("#paymentsCredits"),
@@ -466,7 +468,36 @@ function mergeStoreFromInvoice(targetState, invoice) {
 }
 
 function currentOrderMap() {
-  return new Map(lineItemsFromText(els.lineItemsText.value).map((item) => [productKey(item), item]));
+  return new Map(nonDeliveryItems(lineItemsFromText(els.lineItemsText.value)).map((item) => [productKey(item), item]));
+}
+
+function isDeliveryItem(item = {}) {
+  return /delivery\s+charge|delivery\s+fee/i.test(item.description || "");
+}
+
+function nonDeliveryItems(items = []) {
+  return items.filter((item) => !isDeliveryItem(item));
+}
+
+function deliveryFeeFromItems(items = []) {
+  const delivery = items.find(isDeliveryItem);
+  return delivery ? Number(delivery.amount || delivery.rate || 0) : DEFAULT_DELIVERY_FEE;
+}
+
+function itemsWithDelivery(items = []) {
+  const deliveryFee = Number(els.deliveryFee?.value || 0);
+  const cleanItems = nonDeliveryItems(items);
+  if (deliveryFee > 0) {
+    cleanItems.push({
+      description: "Delivery Charge",
+      upc: "",
+      qty: "1",
+      unit: "ea",
+      rate: deliveryFee,
+      amount: deliveryFee
+    });
+  }
+  return cleanItems;
 }
 
 function productCaseSize(product = {}) {
@@ -499,7 +530,7 @@ function renderStoreProducts() {
     els.storeProductList.innerHTML = `<div class="muted">Select a store to show its available products.</div>`;
     return;
   }
-  const products = store.products || [];
+  const products = (store.products || []).filter((product) => !isDeliveryItem(product));
   if (!products.length) {
     els.storeProductList.innerHTML = `<div class="muted">No products saved for this store yet. Add products below, then save the invoice.</div>`;
     return;
@@ -550,7 +581,7 @@ function updateOrderFromStoreProducts() {
     const label = input.closest(".qty-cell")?.querySelector(".shelf-count");
     if (label) label.textContent = productShelfLabel(input.value, Number(input.dataset.caseSize || 1));
   });
-  const items = (store.products || []).map((product) => {
+  const items = (store.products || []).filter((product) => !isDeliveryItem(product)).map((product) => {
     const qty = qtyByKey.get(productKey(product)) || "0";
     const rate = Number(product.rate || 0);
     const amount = Number(qty || 0) * rate;
@@ -563,7 +594,7 @@ function updateOrderFromStoreProducts() {
       amount
     };
   });
-  els.lineItemsText.value = lineItemsToText(items);
+  els.lineItemsText.value = lineItemsToText(itemsWithDelivery(items));
   updateTotalsFromLineItems();
 }
 
@@ -1038,7 +1069,9 @@ function addOrderItem() {
 }
 
 function updateTotalsFromLineItems() {
-  const total = lineItemsFromText(els.lineItemsText.value).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const items = itemsWithDelivery(lineItemsFromText(els.lineItemsText.value));
+  els.lineItemsText.value = lineItemsToText(items);
+  const total = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   els.invoiceTotal.value = total ? total.toFixed(2) : "";
   els.invoiceAmount.value = total ? total.toFixed(2) : "";
   updateBalanceDue();
@@ -1143,6 +1176,7 @@ function resetInvoiceForm() {
   els.storeSelect.value = "";
   els.issueDate.value = todayOffset(0);
   els.invoiceTerms.value = "Net 10";
+  els.deliveryFee.value = DEFAULT_DELIVERY_FEE.toFixed(2);
   els.customerTotalBalance.value = "";
   els.invoiceTotal.value = "";
   els.paymentsCredits.value = "";
@@ -1202,14 +1236,14 @@ function loadSelectedStore() {
   els.invoiceDt.value = store.dt || "";
   els.specialInstructions.value = store.specialInstructions || "";
   if (!els.invoiceId.value) {
-    els.lineItemsText.value = lineItemsToText((store.products || []).map((product) => ({
+    els.lineItemsText.value = lineItemsToText(itemsWithDelivery((store.products || []).filter((product) => !isDeliveryItem(product)).map((product) => ({
       description: product.description,
       upc: product.upc || "",
       qty: "0",
       unit: product.unit || "ea",
       rate: Number(product.rate || 0),
       amount: 0
-    })));
+    }))));
     updateTotalsFromLineItems();
   }
   renderStoreProducts();
@@ -1239,8 +1273,9 @@ function saveInvoiceFromForm(event) {
 }
 
 function invoiceFromForm() {
-  const items = lineItemsFromText(els.lineItemsText.value);
-  const total = Number(els.invoiceTotal.value || els.invoiceAmount.value);
+  const items = itemsWithDelivery(lineItemsFromText(els.lineItemsText.value));
+  const computedTotal = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const total = computedTotal || Number(els.invoiceTotal.value || els.invoiceAmount.value);
   const balanceDue = Number(els.balanceDue.value || total);
   return {
     id: els.invoiceId.value || crypto.randomUUID(),
@@ -1260,6 +1295,7 @@ function invoiceFromForm() {
     altPhone: els.altPhone.value.trim(),
     dt: els.invoiceDt.value.trim(),
     items,
+    deliveryFee: Number(els.deliveryFee.value || 0),
     customerTotalBalance: Number(els.customerTotalBalance.value || 0),
     total,
     paymentsCredits: Number(els.paymentsCredits.value || 0),
@@ -1330,6 +1366,7 @@ function attachEvents() {
   els.itemQty.addEventListener("input", updateItemAmount);
   els.itemRate.addEventListener("input", updateItemAmount);
   els.lineItemsText.addEventListener("input", updateTotalsFromLineItems);
+  els.deliveryFee.addEventListener("input", updateTotalsFromLineItems);
   els.invoiceTotal.addEventListener("input", updateBalanceDue);
   els.paymentsCredits.addEventListener("input", updateBalanceDue);
   els.invoiceSearch.addEventListener("input", renderInvoices);
@@ -1421,7 +1458,8 @@ function editInvoiceById(id) {
   els.mainPhone.value = invoice.mainPhone || "";
   els.altPhone.value = invoice.altPhone || "";
   els.invoiceDt.value = invoice.dt || "";
-  els.lineItemsText.value = lineItemsToText(invoice.items);
+  els.deliveryFee.value = deliveryFeeFromItems(invoice.items).toFixed(2);
+  els.lineItemsText.value = lineItemsToText(nonDeliveryItems(invoice.items));
   els.customerTotalBalance.value = invoice.customerTotalBalance || "";
   els.invoiceTotal.value = invoiceTotal(invoice) || "";
   els.paymentsCredits.value = invoice.paymentsCredits || "";
