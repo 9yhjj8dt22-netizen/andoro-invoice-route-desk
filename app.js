@@ -2,13 +2,178 @@ const STORAGE_KEY = "andoro_invoice_route_desk_v2";
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const dateFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
+function catalogItem(description, upc = "", rate = 5, unit = "ea") {
+  return { description, upc, unit, rate };
+}
+
+const catalog = {
+  bacon12: catalogItem('Andoro 12" St Louis Style Bacon Pizza', "637599100059"),
+  baconSausage12: catalogItem('Andoro 12" St. Louis Style Bacon/Sausage Pizza', "63759910006"),
+  bbqChicken12: catalogItem('Andoro 12" St. Louis Style BBQ Bacon Chicken Pizza', "637599300046", 5.35),
+  breakfast12: catalogItem('Andoro 12" St. Louis Style Breakfast', "637599300015", 5.35),
+  buffaloChicken12: catalogItem('Andoro 12" St. Louis Style Buffalo Style Chicken', "637599300022", 5.35),
+  cheese12: catalogItem('Andoro 12" St Louis Style Cheese Pizza', "637599100011"),
+  combo12: catalogItem('Andoro 12" St Louis Style Combo Pizza', "637599100073"),
+  megaMeat12: catalogItem('Andoro 12" St Louis Style Mega Meat Pizza', "637599100080"),
+  pepperoni12: catalogItem('Andoro 12" St Louis Style Pepperoni Pizza', "637599100028"),
+  sausage12: catalogItem('Andoro 12" St Louis Style Sausage Pizza', "6375991003"),
+  spicySausage12: catalogItem('Andoro 12" St Louis Style Spicy Sausage Pizza', "637599100042"),
+  supreme12: catalogItem('Andoro 12" St Louis Style Supreme Pizza', "637599100097"),
+  taco12: catalogItem('Andoro 12" Walking Taco Pizza', "637599300053", 5.35),
+  pepperoni9: catalogItem('Andoro 9" St Louis Style Pepperoni Pizza', "3759910011", 3.75),
+  megaMeat9: catalogItem('Andoro 9" St Louis Style Mega Meat Pizza', "3759910017", 3.75),
+  baconSausage9: catalogItem('Andoro 9" St Louis Style Bacon Sausage Pizza', "3759910015", 3.75),
+  cheese9: catalogItem('Andoro 9" St Louis Style Cheese Pizza', "3759910010", 3.75),
+  alfredoKit: catalogItem("J. Arcobasso Alfredo Sauce Pizza Kit", "632016976743", 5.5),
+  buffaloKit: catalogItem("J. Arcobasso Buffalo Pizza Kit", "632016976750", 5.5),
+  tomatoKit: catalogItem("J. Arcobasso Savory Tomato Pizza Kit", "632016976736", 5.5)
+};
+
+const standardTwelveInch = [
+  catalog.bacon12,
+  catalog.baconSausage12,
+  catalog.cheese12,
+  catalog.combo12,
+  catalog.megaMeat12,
+  catalog.pepperoni12,
+  catalog.sausage12,
+  catalog.spicySausage12,
+  catalog.supreme12,
+  catalog.bbqChicken12,
+  catalog.breakfast12,
+  catalog.buffaloChicken12
+].map((item) => ({ ...item, rate: 5 }));
+
+const hyVeeProducts = [
+  catalog.pepperoni12,
+  catalog.megaMeat12,
+  catalog.combo12,
+  catalog.sausage12,
+  catalog.supreme12,
+  catalog.baconSausage12,
+  { ...catalog.buffaloChicken12, rate: 5 },
+  { ...catalog.breakfast12, rate: 5 },
+  { ...catalog.bbqChicken12, rate: 5 },
+  catalog.taco12,
+  catalog.spicySausage12,
+  catalog.bacon12,
+  catalog.cheese12,
+  catalog.pepperoni9,
+  catalog.megaMeat9,
+  catalog.baconSausage9,
+  catalog.cheese9
+];
+
+const delivery10 = catalogItem("Delivery Charge", "", 10);
+const delivery15 = catalogItem("Delivery Charge", "", 15);
+
 const sampleData = {
   invoices: [],
   stops: [],
   optimizedStopIds: [],
   origin: { lat: 41.8781, lng: -87.6298 },
   scans: [],
-  stores: [],
+  stores: [
+    {
+      id: "store-mosers-ashland",
+      name: "Mosers Foods - Ashland",
+      address: "Amy-Frozen Food Mgr\n109 Eastside Dr.\nAshland, MO 65010",
+      terms: "Net 10",
+      rep: "RRM",
+      products: [...standardTwelveInch, delivery10]
+    },
+    {
+      id: "store-mosers-fulton",
+      name: "Mosers Foods- Fulton",
+      address: "2020 N. Bluff\nFulton, MO 65251",
+      terms: "Net 10",
+      rep: "RRM",
+      products: [...standardTwelveInch, catalogItem('Andoro 12" Loaded Baked Potato Pizza', "", 5.35), catalog.taco12, delivery10]
+    },
+    {
+      id: "store-hyvee-osage-beach",
+      name: "Hy-Vee (Osage Beach)",
+      address: "997 Barry Prewitt Memorial DR\nOsage Beach, MO 65065",
+      poNumber: "Using as Order Form",
+      rep: "LC",
+      products: hyVeeProducts
+    },
+    {
+      id: "store-camdenton-sal",
+      name: "Camdenton SAL",
+      address: "709 N Business Rte 5\nCamdenton, MO 65020",
+      products: [
+        { ...catalog.supreme12, rate: 4.85 },
+        { ...catalog.baconSausage12, rate: 4.85 },
+        { ...catalog.taco12, rate: 5 },
+        { ...catalog.bbqChicken12, rate: 5 },
+        delivery15
+      ]
+    },
+    {
+      id: "store-woods-sunrise-beach",
+      name: "Woods Supermarket- Sunrise Beach",
+      address: "13655 N State Highway 5\nSunrise Beach, MO 65079",
+      rep: "RRM",
+      products: [...standardTwelveInch, delivery10]
+    },
+    {
+      id: "store-woods-lake-ozark",
+      name: "Wood's Supermarket",
+      address: "2107 Bagnell Dam Blvd\nLake Ozark, MO 65049",
+      products: [
+        { ...catalog.bbqChicken12, rate: 5 },
+        { ...catalog.buffaloChicken12, rate: 5 },
+        catalog.baconSausage12,
+        catalog.megaMeat12,
+        catalog.spicySausage12,
+        catalog.pepperoni12,
+        catalog.supreme12,
+        delivery10
+      ]
+    },
+    {
+      id: "store-hyvee-columbia-nifong",
+      name: "Hy-Vee (Columbia- Nifong)",
+      address: "405 E. Nifong Blvd.\nColumbia, MO 65201",
+      rep: "RRM",
+      products: hyVeeProducts
+    },
+    {
+      id: "store-hyvee-columbia-1082",
+      name: "Hy-Vee (Columbia) #1082",
+      address: "Brian Hayes Frozen Food Mgr\n25 Conley Road\nColumbia, MO 65201",
+      products: [
+        catalog.pepperoni12,
+        catalog.megaMeat12,
+        catalog.spicySausage12,
+        catalog.combo12,
+        catalog.sausage12,
+        catalog.supreme12,
+        catalog.baconSausage12,
+        catalog.bacon12,
+        catalog.cheese12,
+        catalog.buffaloChicken12,
+        catalog.breakfast12,
+        catalog.bbqChicken12,
+        catalog.alfredoKit,
+        catalog.buffaloKit,
+        catalog.tomatoKit
+      ]
+    },
+    {
+      id: "store-st-louis-county-parks",
+      name: "St. Louis County Parks",
+      address: "550 Weidman Road\nManchester, MO 63011",
+      products: [
+        { ...catalog.pepperoni12, rate: 5.45 },
+        { ...catalog.sausage12, rate: 5.7 },
+        { ...catalog.cheese12, rate: 5.2 },
+        catalogItem("Credit Card Processing Fee", "", 7.85),
+        delivery15
+      ]
+    }
+  ],
   settings: {
     officeEmail: "lisa@andoropizza.com",
     ryanEmail: "ryan@andoropizza.com"
@@ -128,7 +293,7 @@ function loadState() {
 function normalizeState(nextState) {
   nextState.invoices = (nextState.invoices || []).filter((invoice) => !isDemoInvoice(invoice));
   nextState.stops = (nextState.stops || []).filter((stop) => !["North Lake Supply", "Riverbend Builders"].includes(stop.name));
-  nextState.stores = nextState.stores || [];
+  nextState.stores = mergeStores(structuredClone(sampleData.stores), nextState.stores || []);
   nextState.invoices.forEach((invoice) => mergeStoreFromInvoice(nextState, invoice));
   return nextState;
 }
@@ -252,6 +417,29 @@ function mergeProducts(products = [], items = []) {
   return [...byKey.values()].sort((a, b) => a.description.localeCompare(b.description));
 }
 
+function mergeStores(baseStores = [], incomingStores = []) {
+  const byName = new Map();
+  baseStores.forEach((store) => {
+    if (!store?.name) return;
+    byName.set(store.name.toLowerCase(), {
+      ...store,
+      products: mergeProducts([], store.products || [])
+    });
+  });
+  incomingStores.forEach((store) => {
+    if (!store?.name) return;
+    const key = store.name.toLowerCase();
+    const existing = byName.get(key) || {};
+    byName.set(key, {
+      ...existing,
+      ...store,
+      id: existing.id || store.id || crypto.randomUUID(),
+      products: mergeProducts(existing.products || [], store.products || [])
+    });
+  });
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function mergeStoreFromInvoice(targetState, invoice) {
   if (!invoice?.customer) return;
   targetState.stores = targetState.stores || [];
@@ -262,6 +450,8 @@ function mergeStoreFromInvoice(targetState, invoice) {
     email: invoice.customerEmail || existing?.email || "",
     address: invoice.address || existing?.address || "",
     terms: invoice.terms || existing?.terms || "",
+    poNumber: invoice.poNumber || existing?.poNumber || "",
+    rep: invoice.rep || existing?.rep || "",
     mainPhone: invoice.mainPhone || existing?.mainPhone || "",
     altPhone: invoice.altPhone || existing?.altPhone || "",
     dt: invoice.dt || existing?.dt || "",
@@ -917,6 +1107,7 @@ function resetInvoiceForm() {
   els.paymentsCredits.value = "";
   els.balanceDue.value = "";
   clearSignaturePad();
+  renderStoreProducts();
 }
 
 function storeFromForm(existingId = "") {
@@ -927,6 +1118,8 @@ function storeFromForm(existingId = "") {
     email: els.customerEmail.value.trim(),
     address: els.serviceAddress.value.trim(),
     terms: els.invoiceTerms.value.trim(),
+    poNumber: els.poNumber.value.trim(),
+    rep: els.invoiceRep.value.trim(),
     mainPhone: els.mainPhone.value.trim(),
     altPhone: els.altPhone.value.trim(),
     dt: els.invoiceDt.value.trim(),
@@ -961,6 +1154,8 @@ function loadSelectedStore() {
   els.customerEmail.value = store.email || "";
   els.serviceAddress.value = store.address || "";
   els.invoiceTerms.value = store.terms || "Net 10";
+  els.poNumber.value = store.poNumber || "";
+  els.invoiceRep.value = store.rep || "";
   els.mainPhone.value = store.mainPhone || "";
   els.altPhone.value = store.altPhone || "";
   els.invoiceDt.value = store.dt || "";
@@ -1320,15 +1515,16 @@ function printableInvoiceHtml(invoice) {
   const plainAmount = (value) => Number(value || 0).toFixed(2);
   const rows = (invoice.items || []).map((item) => `
     <tr>
-      <td>${escapeHtml(item.description || "")}${item.upc ? `<br><small>UPC ${escapeHtml(item.upc)}</small>` : ""}</td>
+      <td>${escapeHtml(item.description || "")}</td>
+      <td>${escapeHtml(item.upc || "")}</td>
       <td>${escapeHtml(item.qty || "")}</td>
       <td>${escapeHtml(item.unit || "")}</td>
       <td>${plainAmount(item.rate)}</td>
       <td>${plainAmount(item.amount || item.rate)}</td>
     </tr>
-  `).join("") || `<tr><td>Order</td><td></td><td></td><td></td><td>${plainAmount(invoiceTotal(invoice))}</td></tr>`;
+  `).join("") || `<tr><td>Order</td><td></td><td></td><td></td><td></td><td>${plainAmount(invoiceTotal(invoice))}</td></tr>`;
   const blankRows = Array.from({ length: Math.max(0, 22 - (invoice.items?.length || 1)) }, () => `
-    <tr class="blank-row"><td></td><td></td><td></td><td></td><td></td></tr>
+    <tr class="blank-row"><td></td><td></td><td></td><td></td><td></td><td></td></tr>
   `).join("");
   return `<!doctype html>
 <html>
@@ -1436,11 +1632,12 @@ function printableInvoiceHtml(invoice) {
       font-size: 14px;
     }
     tbody tr:nth-child(odd) td { background: var(--gray-row); }
-    th:nth-child(1), td:nth-child(1) { width: 44%; }
-    th:nth-child(2), td:nth-child(2) { width: 10%; text-align: right; }
-    th:nth-child(3), td:nth-child(3) { width: 10%; text-align: center; }
-    th:nth-child(4), td:nth-child(4),
-    th:nth-child(5), td:nth-child(5) { width: 18%; text-align: right; }
+    th:nth-child(1), td:nth-child(1) { width: 39%; }
+    th:nth-child(2), td:nth-child(2) { width: 17%; text-align: center; }
+    th:nth-child(3), td:nth-child(3) { width: 8%; text-align: right; }
+    th:nth-child(4), td:nth-child(4) { width: 9%; text-align: center; }
+    th:nth-child(5), td:nth-child(5),
+    th:nth-child(6), td:nth-child(6) { width: 13.5%; text-align: right; }
     .blank-row td { color: transparent; }
     .balance-row {
       display: grid;
@@ -1594,7 +1791,7 @@ ${escapeHtml(invoice.customerEmail || "")}</div>
     </section>
 
     <table>
-      <thead><tr><th>Description</th><th>Qty</th><th>U/M</th><th>Rate</th><th>Amount</th></tr></thead>
+      <thead><tr><th>Description</th><th>UPC #</th><th>Qty</th><th>U/M</th><th>Rate</th><th>Amount</th></tr></thead>
       <tbody>${rows}${blankRows}</tbody>
     </table>
 
