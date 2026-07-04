@@ -62,6 +62,7 @@ const sampleData = {
   optimizedStopIds: [],
   origin: { lat: 41.8781, lng: -87.6298 },
   scans: [],
+  stores: [],
   settings: {
     officeEmail: "lisa@andoropizza.com",
     ryanEmail: "ryan@andoropizza.com"
@@ -84,6 +85,8 @@ const els = {
   invoiceForm: document.querySelector("#invoiceForm"),
   invoiceId: document.querySelector("#invoiceId"),
   invoiceFormTitle: document.querySelector("#invoiceFormTitle"),
+  storeSelect: document.querySelector("#storeSelect"),
+  saveStore: document.querySelector("#saveStore"),
   customerName: document.querySelector("#customerName"),
   customerEmail: document.querySelector("#customerEmail"),
   serviceAddress: document.querySelector("#serviceAddress"),
@@ -229,9 +232,27 @@ function render() {
   els.ryanEmail.value = state.settings?.ryanEmail || sampleData.settings.ryanEmail;
 
   renderAttention();
+  renderStores();
   renderInvoices();
   renderRoute();
   renderScans();
+}
+
+function renderStores() {
+  const selected = els.storeSelect.value;
+  els.storeSelect.replaceChildren();
+  const empty = document.createElement("option");
+  empty.value = "";
+  empty.textContent = "New / unsaved store";
+  els.storeSelect.append(empty);
+  const stores = [...(state.stores || [])].sort((a, b) => a.name.localeCompare(b.name));
+  stores.forEach((store) => {
+    const option = document.createElement("option");
+    option.value = store.id;
+    option.textContent = store.name;
+    els.storeSelect.append(option);
+  });
+  els.storeSelect.value = stores.some((store) => store.id === selected) ? selected : "";
 }
 
 function renderAttention() {
@@ -802,6 +823,7 @@ function resetInvoiceForm() {
   els.invoiceForm.reset();
   els.invoiceId.value = "";
   els.invoiceFormTitle.textContent = "Add Invoice";
+  els.storeSelect.value = "";
   els.issueDate.value = todayOffset(0);
   els.invoiceTerms.value = "Net 10";
   els.customerTotalBalance.value = "";
@@ -809,6 +831,52 @@ function resetInvoiceForm() {
   els.paymentsCredits.value = "";
   els.balanceDue.value = "";
   clearSignaturePad();
+}
+
+function storeFromForm(existingId = "") {
+  return {
+    id: existingId || crypto.randomUUID(),
+    name: els.customerName.value.trim(),
+    email: els.customerEmail.value.trim(),
+    address: els.serviceAddress.value.trim(),
+    terms: els.invoiceTerms.value.trim(),
+    mainPhone: els.mainPhone.value.trim(),
+    altPhone: els.altPhone.value.trim(),
+    dt: els.invoiceDt.value.trim(),
+    specialInstructions: els.specialInstructions.value.trim()
+  };
+}
+
+function saveStoreFromForm() {
+  if (!els.customerName.value.trim()) {
+    alert("Enter the store name first.");
+    return;
+  }
+  state.stores = state.stores || [];
+  const selectedId = els.storeSelect.value;
+  const duplicate = state.stores.find((store) => store.name.toLowerCase() === els.customerName.value.trim().toLowerCase());
+  const id = selectedId || duplicate?.id || "";
+  const store = storeFromForm(id);
+  const index = state.stores.findIndex((item) => item.id === store.id);
+  if (index >= 0) state.stores[index] = store;
+  else state.stores.push(store);
+  saveState();
+  renderStores();
+  els.storeSelect.value = store.id;
+  alert("Store saved.");
+}
+
+function loadSelectedStore() {
+  const store = (state.stores || []).find((item) => item.id === els.storeSelect.value);
+  if (!store) return;
+  els.customerName.value = store.name || "";
+  els.customerEmail.value = store.email || "";
+  els.serviceAddress.value = store.address || "";
+  els.invoiceTerms.value = store.terms || "Net 10";
+  els.mainPhone.value = store.mainPhone || "";
+  els.altPhone.value = store.altPhone || "";
+  els.invoiceDt.value = store.dt || "";
+  els.specialInstructions.value = store.specialInstructions || "";
 }
 
 function saveAndShareInvoice() {
@@ -869,10 +937,34 @@ function saveInvoice({ keepForm = false } = {}) {
   const index = state.invoices.findIndex((item) => item.id === invoice.id);
   if (index >= 0) state.invoices[index] = invoice;
   else state.invoices.unshift(invoice);
+  upsertStoreFromInvoice(invoice);
   saveState();
   if (!keepForm) resetInvoiceForm();
   render();
   return invoice;
+}
+
+function upsertStoreFromInvoice(invoice) {
+  if (!invoice.customer) return;
+  state.stores = state.stores || [];
+  const selectedId = els.storeSelect.value;
+  const existing = state.stores.find((store) => store.id === selectedId)
+    || state.stores.find((store) => store.name.toLowerCase() === invoice.customer.toLowerCase());
+  const store = {
+    id: existing?.id || crypto.randomUUID(),
+    name: invoice.customer,
+    email: invoice.customerEmail || "",
+    address: invoice.address || "",
+    terms: invoice.terms || "",
+    mainPhone: invoice.mainPhone || "",
+    altPhone: invoice.altPhone || "",
+    dt: invoice.dt || "",
+    specialInstructions: invoice.specialInstructions || ""
+  };
+  const index = state.stores.findIndex((item) => item.id === store.id);
+  if (index >= 0) state.stores[index] = store;
+  else state.stores.push(store);
+  els.storeSelect.value = store.id;
 }
 
 function saveStopFromForm(event) {
@@ -906,6 +998,8 @@ function attachEvents() {
   document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tab)));
   document.querySelectorAll("[data-tab-jump]").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tabJump)));
   els.invoiceForm.addEventListener("submit", saveInvoiceFromForm);
+  els.storeSelect.addEventListener("change", loadSelectedStore);
+  els.saveStore.addEventListener("click", saveStoreFromForm);
   els.clearInvoiceForm.addEventListener("click", resetInvoiceForm);
   els.clearSignature.addEventListener("click", clearSignaturePad);
   els.saveAndPrintInvoice.addEventListener("click", saveAndPrintInvoice);
@@ -980,6 +1074,9 @@ function attachEvents() {
 function editInvoiceById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
   if (!invoice) return;
+  const store = (state.stores || []).find((item) => item.name.toLowerCase() === String(invoice.customer || "").toLowerCase());
+  renderStores();
+  els.storeSelect.value = store?.id || "";
   els.invoiceId.value = invoice.id;
   els.customerName.value = invoice.customer;
   els.customerEmail.value = invoice.customerEmail || "";

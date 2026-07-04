@@ -125,9 +125,21 @@
                 <button class="ghost-button" id="clearInvoiceForm" type="button">Clear</button>
               </div>
               <input type="hidden" id="invoiceId">
+              <section class="product-picker">
+                <div class="signature-heading">
+                  <span>Store</span>
+                  <button class="ghost-button" id="saveStore" type="button">Save store</button>
+                </div>
+                <label>
+                  Select saved store
+                  <select id="storeSelect">
+                    <option value="">New / unsaved store</option>
+                  </select>
+                </label>
+              </section>
               <label>
-                Customer
-                <input id="customerName" required placeholder="Customer name">
+                Store / customer
+                <input id="customerName" required placeholder="Store or customer name">
               </label>
               <label>
                 Customer email
@@ -425,7 +437,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=11"></script>
+    <script src="app.js?v=12"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
