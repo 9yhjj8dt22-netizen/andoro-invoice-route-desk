@@ -102,8 +102,6 @@ const sampleData = {
     {
       id: "store-hyvee-osage-beach",
       name: "Hy-Vee (Osage Beach)",
-      orderBlocked: true,
-      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "997 Barry Prewitt Memorial DR\nOsage Beach, MO 65065",
       poNumber: "Using as Order Form",
       rep: "LC",
@@ -152,8 +150,6 @@ const sampleData = {
     {
       id: "store-hyvee-columbia-nifong",
       name: "Hy-Vee (Columbia- Nifong)",
-      orderBlocked: true,
-      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "405 E. Nifong Blvd.\nColumbia, MO 65201",
       rep: "RRM",
       products: hyVeeProducts
@@ -161,8 +157,6 @@ const sampleData = {
     {
       id: "store-hyvee-columbia-1082",
       name: "Hy-Vee (Columbia) #1082",
-      orderBlocked: true,
-      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
       address: "Brian Hayes Frozen Food Mgr\n25 Conley Road\nColumbia, MO 65201",
       products: [
         catalog.pepperoni12,
