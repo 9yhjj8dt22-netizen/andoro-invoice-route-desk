@@ -85,7 +85,10 @@ const sampleData = {
   routeDay: {
     date: "",
     rep: DEFAULT_REP,
-    startingInvoiceNumber: ""
+    startingInvoiceNumber: "",
+    notes: "",
+    receipts: [],
+    prospects: []
   },
   origin: { lat: 41.8781, lng: -87.6298 },
   scans: [],
@@ -315,6 +318,17 @@ const els = {
   routeDayDate: document.querySelector("#routeDayDate"),
   routeDayRep: document.querySelector("#routeDayRep"),
   routeStartInvoice: document.querySelector("#routeStartInvoice"),
+  routeDayNotes: document.querySelector("#routeDayNotes"),
+  routeReceiptFiles: document.querySelector("#routeReceiptFiles"),
+  routeReceiptCamera: document.querySelector("#routeReceiptCamera"),
+  clearRouteReceipts: document.querySelector("#clearRouteReceipts"),
+  routeReceiptGrid: document.querySelector("#routeReceiptGrid"),
+  prospectName: document.querySelector("#prospectName"),
+  prospectContact: document.querySelector("#prospectContact"),
+  prospectAddress: document.querySelector("#prospectAddress"),
+  prospectNotes: document.querySelector("#prospectNotes"),
+  addProspectStop: document.querySelector("#addProspectStop"),
+  prospectList: document.querySelector("#prospectList"),
   routeDayStatus: document.querySelector("#routeDayStatus"),
   routeDayMapsLink: document.querySelector("#routeDayMapsLink"),
   clearRouteDay: document.querySelector("#clearRouteDay"),
@@ -464,12 +478,14 @@ function render() {
   els.routeDayDate.value = routeDate();
   els.routeDayRep.value = routeRep();
   els.routeStartInvoice.value = state.routeDay?.startingInvoiceNumber || "";
+  els.routeDayNotes.value = state.routeDay?.notes || "";
 
   renderAttention();
   renderStores();
   renderInvoices();
   renderRoute();
   renderScans();
+  renderRouteDayCapture();
 }
 
 function renderStores() {
@@ -981,22 +997,73 @@ function routeScans() {
 }
 
 function renderRouteDayStatus() {
-  const stops = routeScans().filter((scan) => scan.address);
+  const prospectsWithAddress = (state.routeDay?.prospects || []).filter((prospect) => prospect.address);
+  const stops = [
+    ...routeScans().filter((scan) => scan.address).map((scan) => ({
+      name: scan.customer || "Stop",
+      address: scan.address
+    })),
+    ...prospectsWithAddress.map((prospect) => ({
+      name: prospect.name || "New account stop",
+      address: prospect.address
+    }))
+  ];
   const orderedCount = routeScans().length;
+  const prospectCount = state.routeDay?.prospects?.length || 0;
   const lisaCount = routeScans().filter((scan) => scanLisaHandled(scan)).length;
   els.routeDayStatus.textContent = orderedCount
-    ? `${orderedCount} route stop${orderedCount === 1 ? "" : "s"} loaded, ${lisaCount} Lisa handled`
-    : "No route stops yet";
+    ? `${orderedCount} route stop${orderedCount === 1 ? "" : "s"} loaded, ${lisaCount} Lisa handled, ${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`
+    : `${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`;
   if (!stops.length) {
     els.routeDayMapsLink.classList.add("disabled");
     els.routeDayMapsLink.href = "#";
     return;
   }
-  els.routeDayMapsLink.href = googleMapsUrl(stops.map((scan) => ({
-    name: scan.customer || "Stop",
-    address: scan.address
-  })));
+  els.routeDayMapsLink.href = googleMapsUrl(stops);
   els.routeDayMapsLink.classList.remove("disabled");
+}
+
+function renderRouteDayCapture() {
+  const receipts = state.routeDay?.receipts || [];
+  els.routeReceiptGrid.replaceChildren();
+  if (!receipts.length) {
+    els.routeReceiptGrid.append(emptyState());
+  } else {
+    receipts.forEach((receipt) => {
+      const card = document.createElement("article");
+      card.className = "receipt-card";
+      const preview = receipt.dataUrl?.startsWith("data:image/")
+        ? `<img src="${escapeAttribute(receipt.dataUrl)}" alt="${escapeAttribute(receipt.name || "Receipt")}">`
+        : `<div class="file-preview">PDF</div>`;
+      card.innerHTML = `
+        ${preview}
+        <div>
+          <strong>${escapeHtml(receipt.name || "Receipt")}</strong>
+          <button class="ghost-button" data-delete-receipt="${receipt.id}" type="button">Remove</button>
+        </div>`;
+      els.routeReceiptGrid.append(card);
+    });
+  }
+
+  const prospects = state.routeDay?.prospects || [];
+  els.prospectList.replaceChildren();
+  if (!prospects.length) {
+    els.prospectList.append(emptyState());
+  } else {
+    prospects.forEach((prospect, index) => {
+      const card = document.createElement("article");
+      card.className = "prospect-card";
+      card.innerHTML = `
+        <div>
+          <strong>${escapeHtml(prospect.name || `New account stop ${index + 1}`)}</strong>
+          <span>${escapeHtml([prospect.contact, prospect.address].filter(Boolean).join(" - "))}</span>
+          ${prospect.notes ? `<p>${escapeHtml(prospect.notes)}</p>` : ""}
+        </div>
+        <button class="ghost-button" data-delete-prospect="${prospect.id}" type="button">Remove</button>`;
+      els.prospectList.append(card);
+    });
+  }
+  renderRouteDayStatus();
 }
 
 function parseInvoiceText(rawText, fileName) {
@@ -1219,6 +1286,24 @@ function routeDayTotal() {
 function routeSummaryHtml() {
   const salesByStore = routeSalesByStore();
   const stops = routeScans();
+  const receipts = state.routeDay?.receipts || [];
+  const prospects = state.routeDay?.prospects || [];
+  const prospectRows = prospects.map((prospect, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td>
+        <strong>${escapeHtml(prospect.name || "New account stop")}</strong>
+        <span>${escapeHtml(prospect.address || "")}</span>
+      </td>
+      <td>${escapeHtml(prospect.contact || "")}</td>
+      <td>${escapeHtml(prospect.notes || "")}</td>
+    </tr>`).join("");
+  const receiptRows = receipts.map((receipt, index) => `
+    <tr>
+      <td>${index + 1}</td>
+      <td>${escapeHtml(receipt.name || "Receipt")}</td>
+      <td>${escapeHtml(formatDate(receipt.date || routeDate()))}</td>
+    </tr>`).join("");
   const stopRows = stops.map((scan, index) => {
     const storeName = scan.customer || `Stop ${index + 1}`;
     const salesTotal = salesByStore.get(normalizedName(storeName))?.total || 0;
@@ -1254,6 +1339,7 @@ function routeSummaryHtml() {
     .meta { text-align: right; line-height: 1.5; font-weight: 700; }
     .total { margin: 18px 0; padding: 14px; border: 2px solid #176b4d; display: flex; justify-content: space-between; font-size: 22px; font-weight: 900; }
     h2 { margin: 22px 0 8px; font-size: 18px; color: #0d3326; }
+    .notes { border: 1px solid #176b4d; padding: 10px; min-height: 56px; line-height: 1.45; }
     table { width: 100%; border-collapse: collapse; }
     th { background: #b9d6c4; color: #0d3326; text-align: left; }
     th, td { border: 1px solid #176b4d; padding: 8px; vertical-align: top; }
@@ -1277,10 +1363,22 @@ function routeSummaryHtml() {
       </div>
     </header>
     <section class="total"><span>Day Total</span><span>${money.format(routeDayTotal())}</span></section>
+    <h2>Day Notes</h2>
+    <section class="notes">${escapeHtml(state.routeDay?.notes || "No general day notes.").replace(/\n/g, "<br>")}</section>
     <h2>Stops And Notes</h2>
     <table>
       <thead><tr><th>Order</th><th>Store</th><th>Handled By</th><th>Sales</th><th>Notes</th></tr></thead>
       <tbody>${stopRows || `<tr><td colspan="5">No route stops loaded.</td></tr>`}</tbody>
+    </table>
+    <h2>New Account Stops</h2>
+    <table>
+      <thead><tr><th>#</th><th>Business</th><th>Contact</th><th>Notes</th></tr></thead>
+      <tbody>${prospectRows || `<tr><td colspan="4">No new account stops recorded.</td></tr>`}</tbody>
+    </table>
+    <h2>Gas / Expense Receipts</h2>
+    <table>
+      <thead><tr><th>#</th><th>Receipt</th><th>Date Added</th></tr></thead>
+      <tbody>${receiptRows || `<tr><td colspan="3">No receipts captured.</td></tr>`}</tbody>
     </table>
     <h2>Invoices Sold Today</h2>
     <table>
@@ -1696,6 +1794,9 @@ function saveRouteDaySettings() {
   state.routeDay.date = els.routeDayDate.value || todayOffset(0);
   state.routeDay.rep = els.routeDayRep.value.trim() || DEFAULT_REP;
   state.routeDay.startingInvoiceNumber = els.routeStartInvoice.value.trim();
+  state.routeDay.notes = els.routeDayNotes.value;
+  state.routeDay.receipts = state.routeDay.receipts || [];
+  state.routeDay.prospects = state.routeDay.prospects || [];
   if (!els.invoiceId.value) {
     els.issueDate.value = routeDate();
     els.invoiceRep.value = routeRep();
@@ -1705,6 +1806,68 @@ function saveRouteDaySettings() {
   renderRouteDayStatus();
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleReceiptSelection(event) {
+  const files = [...event.target.files];
+  if (!files.length) return;
+  state.routeDay = state.routeDay || structuredClone(sampleData.routeDay);
+  state.routeDay.receipts = state.routeDay.receipts || [];
+  for (const file of files) {
+    const dataUrl = await fileToDataUrl(file);
+    state.routeDay.receipts.push({
+      id: crypto.randomUUID(),
+      name: file.name,
+      type: file.type,
+      date: todayOffset(0),
+      dataUrl
+    });
+  }
+  event.target.value = "";
+  saveState();
+  renderRouteDayCapture();
+}
+
+function clearRouteReceipts() {
+  if (!confirm("Clear today's receipt scans?")) return;
+  state.routeDay = state.routeDay || structuredClone(sampleData.routeDay);
+  state.routeDay.receipts = [];
+  saveState();
+  renderRouteDayCapture();
+}
+
+function addProspectStop() {
+  const name = els.prospectName.value.trim();
+  const address = els.prospectAddress.value.trim();
+  const notes = els.prospectNotes.value.trim();
+  if (!name && !address && !notes) {
+    alert("Add a store name, address, or note for the new account stop first.");
+    return;
+  }
+  state.routeDay = state.routeDay || structuredClone(sampleData.routeDay);
+  state.routeDay.prospects = state.routeDay.prospects || [];
+  state.routeDay.prospects.push({
+    id: crypto.randomUUID(),
+    name,
+    contact: els.prospectContact.value.trim(),
+    address,
+    notes
+  });
+  els.prospectName.value = "";
+  els.prospectContact.value = "";
+  els.prospectAddress.value = "";
+  els.prospectNotes.value = "";
+  saveState();
+  renderRouteDayCapture();
+}
+
 function clearRouteDay() {
   if (!confirm("Clear today's scanned route stops and route settings?")) return;
   selectedFiles = [];
@@ -1712,7 +1875,10 @@ function clearRouteDay() {
   state.routeDay = {
     date: todayOffset(0),
     rep: DEFAULT_REP,
-    startingInvoiceNumber: ""
+    startingInvoiceNumber: "",
+    notes: "",
+    receipts: [],
+    prospects: []
   };
   els.invoiceFiles.value = "";
   els.invoiceCamera.value = "";
@@ -1771,6 +1937,11 @@ function attachEvents() {
   els.routeDayDate.addEventListener("input", saveRouteDaySettings);
   els.routeDayRep.addEventListener("input", saveRouteDaySettings);
   els.routeStartInvoice.addEventListener("input", saveRouteDaySettings);
+  els.routeDayNotes.addEventListener("input", saveRouteDaySettings);
+  els.routeReceiptFiles.addEventListener("change", handleReceiptSelection);
+  els.routeReceiptCamera.addEventListener("change", handleReceiptSelection);
+  els.clearRouteReceipts.addEventListener("click", clearRouteReceipts);
+  els.addProspectStop.addEventListener("click", addProspectStop);
   els.clearRouteDay.addEventListener("click", clearRouteDay);
   els.printRouteSummary.addEventListener("click", printRouteSummary);
 
@@ -1782,6 +1953,8 @@ function attachEvents() {
     const shareInvoice = event.target.closest("[data-share-invoice]");
     const printInvoice = event.target.closest("[data-print-invoice]");
     const caseButton = event.target.closest("[data-case-key]");
+    const deleteReceipt = event.target.closest("[data-delete-receipt]");
+    const deleteProspect = event.target.closest("[data-delete-prospect]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
     if (deleteInvoice) deleteInvoiceById(deleteInvoice.dataset.deleteInvoice);
     if (emailInvoice) emailInvoiceById(emailInvoice.dataset.emailInvoice);
@@ -1789,6 +1962,16 @@ function attachEvents() {
     if (shareInvoice) shareInvoiceById(shareInvoice.dataset.shareInvoice);
     if (printInvoice) printInvoiceById(printInvoice.dataset.printInvoice);
     if (caseButton) adjustStoreProductQty(caseButton);
+    if (deleteReceipt) {
+      state.routeDay.receipts = (state.routeDay?.receipts || []).filter((receipt) => receipt.id !== deleteReceipt.dataset.deleteReceipt);
+      saveState();
+      renderRouteDayCapture();
+    }
+    if (deleteProspect) {
+      state.routeDay.prospects = (state.routeDay?.prospects || []).filter((prospect) => prospect.id !== deleteProspect.dataset.deleteProspect);
+      saveState();
+      renderRouteDayCapture();
+    }
   });
 
   document.addEventListener("input", (event) => {

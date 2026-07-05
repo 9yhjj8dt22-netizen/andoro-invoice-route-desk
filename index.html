@@ -15,7 +15,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "26";
+        const currentVersion = "27";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -23,7 +23,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=26">
+    <link rel="stylesheet" href="styles.css?v=27">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -131,6 +131,55 @@
             </div>
             <div class="route-actions">
               <span id="routeDayStatus">No route stops yet</span>
+            </div>
+            <label>
+              Day notes
+              <textarea id="routeDayNotes" rows="4" placeholder="Van #, odometer, expenses, weather, customer issues, anything else from the day"></textarea>
+            </label>
+            <div class="route-capture-grid">
+              <section class="route-capture-card">
+                <div class="signature-heading">
+                  <span>Gas / Expense Receipts</span>
+                  <button class="ghost-button" id="clearRouteReceipts" type="button">Clear receipts</button>
+                </div>
+                <div class="picker-row">
+                  <label class="file-button">
+                    Choose receipt
+                    <input id="routeReceiptFiles" accept="image/*,application/pdf" multiple type="file">
+                  </label>
+                  <label class="file-button secondary-file-button">
+                    Scan receipt
+                    <input id="routeReceiptCamera" accept="image/*" capture="environment" multiple type="file">
+                  </label>
+                </div>
+                <div class="receipt-grid" id="routeReceiptGrid"></div>
+              </section>
+
+              <section class="route-capture-card">
+                <div class="signature-heading">
+                  <span>New Account Stops</span>
+                  <button class="ghost-button" id="addProspectStop" type="button">Add stop</button>
+                </div>
+                <div class="field-row">
+                  <label>
+                    Store / business
+                    <input id="prospectName" placeholder="Prospect name">
+                  </label>
+                  <label>
+                    Contact
+                    <input id="prospectContact" placeholder="Manager / buyer">
+                  </label>
+                </div>
+                <label>
+                  Address
+                  <input id="prospectAddress" placeholder="Street, city, state">
+                </label>
+                <label>
+                  Notes
+                  <textarea id="prospectNotes" rows="3" placeholder="What happened, follow-up needed, product interest"></textarea>
+                </label>
+                <div class="prospect-list" id="prospectList"></div>
+              </section>
             </div>
           </section>
 
