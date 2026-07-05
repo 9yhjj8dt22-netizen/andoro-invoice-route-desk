@@ -71,6 +71,7 @@ const delivery15 = catalogItem("Delivery Charge", "", 15);
 const PIZZAS_PER_CASE = 12;
 const CASES_PER_SHELF = 2;
 const DEFAULT_DELIVERY_FEE = 10;
+const DEFAULT_REP = "J.Ballew";
 
 const sampleData = {
   invoices: [],
@@ -602,7 +603,9 @@ function itemsWithDelivery(items = []) {
 }
 
 function productCaseSize(product = {}) {
-  return /pizza/i.test(product.description || "") ? PIZZAS_PER_CASE : 1;
+  const description = String(product.description || "").toLowerCase();
+  if (/delivery|fee|charge|subtotal|credit/.test(description)) return 1;
+  return /pizza|andoro\s+(?:9|12)"|st\.?\s*louis\s*style/.test(description) ? PIZZAS_PER_CASE : 1;
 }
 
 function productShelfLabel(qty, caseSize) {
@@ -1277,6 +1280,7 @@ function resetInvoiceForm() {
   els.storeSelect.value = "";
   els.issueDate.value = todayOffset(0);
   els.invoiceTerms.value = "Net 10";
+  els.invoiceRep.value = DEFAULT_REP;
   els.deliveryFee.value = DEFAULT_DELIVERY_FEE.toFixed(2);
   els.customerTotalBalance.value = "";
   els.invoiceTotal.value = "";
@@ -1338,7 +1342,8 @@ function loadSelectedStore() {
   els.serviceAddress.value = store.address || "";
   els.invoiceTerms.value = store.terms || "Net 10";
   els.poNumber.value = store.poNumber || "";
-  els.invoiceRep.value = store.rep || "";
+  if (!els.invoiceId.value) els.invoiceRep.value = DEFAULT_REP;
+  else els.invoiceRep.value = store.rep || "";
   els.mainPhone.value = store.mainPhone || "";
   els.altPhone.value = store.altPhone || "";
   els.invoiceDt.value = store.dt || "";

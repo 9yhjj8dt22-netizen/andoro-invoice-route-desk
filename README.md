@@ -10,6 +10,7 @@ A phone-friendly invoice and route planning app for Andoro & Sons.
 - Starts with the stores and available products pulled from the provided Andoro invoices.
 - Shows that store's available products with ordered quantity set to `0` by default.
 - Lets pizza quantities move by full cases: `12`, `24`, `36`, and so on.
+- Defaults new invoices to rep `J.Ballew` unless changed during the order.
 - Adds a delivery fee automatically, defaulting to `$10.00` unless changed.
 - Requires a simple access code before opening the form.
 - Blocks invoice creation for Lisa-only stores that already have invoice-numbered sheets.
