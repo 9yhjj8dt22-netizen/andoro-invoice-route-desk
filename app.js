@@ -1,6 +1,11 @@
 const STORAGE_KEY = "andoro_invoice_route_desk_v2";
 const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
+const TAB_HEADERS = {
+  invoices: "Check Store Needs - Build Order - Get Signature - Print / Share",
+  scan: "Route Organizer / Summary",
+  settings: "Office Contact / Backup / Reset"
+};
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const dateFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" });
 
@@ -220,6 +225,7 @@ const els = {
   accessCode: document.querySelector("#accessCode"),
   accessError: document.querySelector("#accessError"),
   appShell: document.querySelector("#appShell"),
+  pageHeader: document.querySelector("#pageHeader"),
   todayLabel: document.querySelector("#todayLabel"),
   openBalance: document.querySelector("#openBalance"),
   openInvoiceCount: document.querySelector("#openInvoiceCount"),
@@ -394,6 +400,7 @@ function setTab(tabId) {
   document.querySelectorAll(".tab-panel").forEach((panel) => {
     panel.classList.toggle("active", panel.id === tabId);
   });
+  els.pageHeader.textContent = TAB_HEADERS[tabId] || TAB_HEADERS.invoices;
 }
 
 function emptyState() {

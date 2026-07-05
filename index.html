@@ -15,7 +15,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "25";
+        const currentVersion = "26";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -23,7 +23,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=25">
+    <link rel="stylesheet" href="styles.css?v=26">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -57,7 +57,7 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">Andoro & Sons</p>
-            <h1>Check store needs, build order, get signature, print /share</h1>
+            <h1 id="pageHeader">Check Store Needs - Build Order - Get Signature - Print / Share</h1>
           </div>
           <div class="today-card">
             <span id="todayLabel">Today</span>
