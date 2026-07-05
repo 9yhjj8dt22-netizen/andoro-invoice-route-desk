@@ -1,4 +1,4 @@
-const CACHE_NAME = "andoro-invoice-route-desk-v24";
+const CACHE_NAME = "andoro-invoice-route-desk-v25";
 const APP_FILES = [
   "./",
   "./index.html",

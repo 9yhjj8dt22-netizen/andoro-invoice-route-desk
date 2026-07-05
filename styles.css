@@ -662,6 +662,31 @@ th {
   color: var(--muted);
 }
 
+.route-day-panel {
+  margin-bottom: 18px;
+}
+
+.route-stop-tools {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.checkbox-label {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 800;
+  color: var(--green-dark);
+}
+
+.checkbox-label input {
+  width: 20px;
+  height: 20px;
+}
+
 .photo-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -758,7 +783,7 @@ th {
   }
 
   .nav-tabs {
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
 
   .tab-button {
@@ -784,6 +809,10 @@ th {
 
   .qty-cell {
     grid-template-columns: 1fr 92px 1fr;
+  }
+
+  .route-stop-tools {
+    grid-template-columns: 1fr;
   }
 }
 

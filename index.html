@@ -15,7 +15,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "24";
+        const currentVersion = "25";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -23,7 +23,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=24">
+    <link rel="stylesheet" href="styles.css?v=25">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -48,6 +48,7 @@
         </div>
         <nav class="nav-tabs" aria-label="Main views">
           <button class="tab-button active" data-tab="invoices" type="button">Invoice</button>
+          <button class="tab-button" data-tab="scan" type="button">Today's Route</button>
           <button class="tab-button" data-tab="settings" type="button">Office</button>
         </nav>
       </aside>
@@ -105,6 +106,34 @@
         </section>
 
         <section class="tab-panel" id="scan">
+          <section class="work-panel route-day-panel">
+            <div class="panel-heading controls-heading">
+              <h2>Today's Route</h2>
+              <div class="control-row">
+                <button class="secondary-button" id="clearRouteDay" type="button">Clear route day</button>
+                <button class="secondary-button" id="printRouteSummary" type="button">Print summary</button>
+                <a class="map-link disabled" id="routeDayMapsLink" href="#" target="_blank" rel="noreferrer">Open in Google Maps</a>
+              </div>
+            </div>
+            <div class="field-row">
+              <label>
+                Route date
+                <input id="routeDayDate" type="date">
+              </label>
+              <label>
+                Rep name
+                <input id="routeDayRep" placeholder="J.Ballew">
+              </label>
+              <label>
+                Starting invoice #
+                <input id="routeStartInvoice" inputmode="numeric" placeholder="Provided by Lisa">
+              </label>
+            </div>
+            <div class="route-actions">
+              <span id="routeDayStatus">No route stops yet</span>
+            </div>
+          </section>
+
           <div class="scan-layout">
             <section class="work-panel">
               <div class="panel-heading">
