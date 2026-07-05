@@ -13,7 +13,7 @@
       body.access-locked .app-shell { display: none !important; }
       body:not(.access-locked) .access-screen { display: none !important; }
     </style>
-    <link rel="stylesheet" href="styles.css?v=21">
+    <link rel="stylesheet" href="styles.css?v=22">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -421,6 +421,10 @@
                 Ryan
                 <input id="ryanEmail" inputmode="email" type="email" placeholder="ryan@andoropizza.com">
               </label>
+              <label>
+                Jason
+                <input id="jasonEmail" inputmode="email" type="email" placeholder="safetyjason78@gmail.com">
+              </label>
               <div class="button-row settings-actions">
                 <button class="primary-button" id="saveOfficeSettings" type="button">Save office emails</button>
               </div>
@@ -459,7 +463,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=21"></script>
+    <script src="app.js?v=22"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");

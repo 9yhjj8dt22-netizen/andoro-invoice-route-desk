@@ -17,6 +17,7 @@ A phone-friendly invoice and route planning app for Andoro & Sons.
 - Opens a customer copy that can be printed or saved as a PDF before leaving.
 - Captures the customer's digital signature on the invoice.
 - Sends a copy of the invoice details to Lisa and Ryan at the office.
+- Sends Jason a copy of office emails until his Andoro email is ready.
 - Keeps saved invoices on the device for resending later.
 
 ## Route Workflow

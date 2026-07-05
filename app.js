@@ -82,8 +82,8 @@ const sampleData = {
     {
       id: "store-mosers-ashland",
       name: "Mosers Foods - Ashland",
-      orderBlocked: false,
-      orderBlockedReason: "",
+      orderBlocked: true,
+      orderBlockedReason: "Lisa calls this account. Do not create an invoice for this store.",
       address: "Amy-Frozen Food Mgr\n109 Eastside Dr.\nAshland, MO 65010",
       terms: "Net 10",
       rep: "RRM",
@@ -199,7 +199,8 @@ const sampleData = {
   ],
   settings: {
     officeEmail: "lisa@andoropizza.com",
-    ryanEmail: "ryan@andoropizza.com"
+    ryanEmail: "ryan@andoropizza.com",
+    jasonEmail: "safetyjason78@gmail.com"
   }
 };
 
@@ -288,6 +289,7 @@ const els = {
   resetData: document.querySelector("#resetData"),
   officeEmail: document.querySelector("#officeEmail"),
   ryanEmail: document.querySelector("#ryanEmail"),
+  jasonEmail: document.querySelector("#jasonEmail"),
   saveOfficeSettings: document.querySelector("#saveOfficeSettings"),
   invoiceFiles: document.querySelector("#invoiceFiles"),
   invoiceCamera: document.querySelector("#invoiceCamera"),
@@ -414,6 +416,7 @@ function render() {
   els.originLng.value = state.origin?.lng ?? "";
   els.officeEmail.value = state.settings?.officeEmail || sampleData.settings.officeEmail;
   els.ryanEmail.value = state.settings?.ryanEmail || sampleData.settings.ryanEmail;
+  els.jasonEmail.value = state.settings?.jasonEmail || sampleData.settings.jasonEmail;
 
   renderAttention();
   renderStores();
@@ -1463,6 +1466,7 @@ function saveOfficeSettings() {
   state.settings = state.settings || {};
   state.settings.officeEmail = els.officeEmail.value.trim();
   state.settings.ryanEmail = els.ryanEmail.value.trim();
+  state.settings.jasonEmail = els.jasonEmail.value.trim();
   saveState();
   alert("Office emails saved.");
 }
@@ -1645,10 +1649,11 @@ function printInvoice(invoice) {
 }
 
 function officeRecipients() {
-  return [
+  return [...new Set([
     state.settings?.officeEmail || sampleData.settings.officeEmail,
-    state.settings?.ryanEmail || sampleData.settings.ryanEmail
-  ].map((email) => String(email || "").trim()).filter(Boolean);
+    state.settings?.ryanEmail || sampleData.settings.ryanEmail,
+    state.settings?.jasonEmail || sampleData.settings.jasonEmail
+  ].map((email) => String(email || "").trim()).filter(Boolean))];
 }
 
 function emailOffice(invoice) {
@@ -1677,7 +1682,7 @@ function emailInvoice(invoice) {
 }
 
 function invoiceSubject(invoice) {
-  return `Andoro & Sons Invoice ${invoice.number || ""}`.trim();
+  return `${invoice.customer || "Andoro Order"} - ${formatDate(invoiceDate(invoice))}`.trim();
 }
 
 function invoiceMessage(invoice) {
