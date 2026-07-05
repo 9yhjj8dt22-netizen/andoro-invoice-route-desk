@@ -2,6 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8">
+    <meta http-equiv="Cache-Control" content="no-store, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Andoro & Sons | Invoice Order Form</title>
     <meta name="theme-color" content="#d71920">
@@ -15,15 +18,23 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "28";
+        const currentVersion = "29";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
           window.location.replace(`${window.location.pathname}?${params.toString()}${window.location.hash}`);
         }
+        if ("caches" in window) {
+          caches.keys().then((keys) => keys
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v29")
+            .forEach((key) => caches.delete(key)));
+        }
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then((registrations) => registrations.forEach((registration) => registration.update()));
+        }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=28">
+    <link rel="stylesheet" href="styles.css?v=29">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -362,7 +373,7 @@
               <div class="field-row">
                 <label>
                   Delivery fee
-                  <input id="deliveryFee" min="0" step="0.01" type="number" value="10.00" placeholder="10.00">
+                  <input id="deliveryFee" min="0" required step="0.01" type="number" value="10.00" placeholder="10.00">
                 </label>
                 <label>
                   Customer total balance
