@@ -257,6 +257,7 @@ const els = {
   storeManagerPo: document.querySelector("#storeManagerPo"),
   storeManagerRep: document.querySelector("#storeManagerRep"),
   storeManagerDt: document.querySelector("#storeManagerDt"),
+  storeManagerDeliveryFee: document.querySelector("#storeManagerDeliveryFee"),
   storeManagerMainPhone: document.querySelector("#storeManagerMainPhone"),
   storeManagerAltPhone: document.querySelector("#storeManagerAltPhone"),
   storeManagerInstructions: document.querySelector("#storeManagerInstructions"),
@@ -741,6 +742,11 @@ function mergeStoreFromInvoice(targetState, invoice) {
   targetState.stores = targetState.stores || [];
   const matched = matchingStoreForInvoice(invoice, targetState.stores);
   const existing = matched || targetState.stores.find((store) => store.name.toLowerCase() === invoice.customer.toLowerCase());
+  const invoiceItems = invoice.items || [];
+  const invoiceDelivery = invoiceItems.find(isDeliveryItem);
+  const deliveryProducts = invoiceDelivery
+    ? [{ description: "Delivery Charge", upc: "", unit: "ea", rate: Number(invoiceDelivery.amount || invoiceDelivery.rate || 0) }]
+    : [];
   const store = {
     id: existing?.id || crypto.randomUUID(),
     name: existing?.name || invoice.customer,
@@ -755,7 +761,7 @@ function mergeStoreFromInvoice(targetState, invoice) {
     altPhone: invoice.altPhone || existing?.altPhone || "",
     dt: invoice.dt || existing?.dt || "",
     specialInstructions: invoice.specialInstructions || existing?.specialInstructions || "",
-    products: mergeProducts(existing?.products || [], invoice.items || [])
+    products: mergeProducts(existing?.products || [], [...invoiceItems, ...deliveryProducts])
   };
   const index = targetState.stores.findIndex((item) => item.id === store.id);
   if (index >= 0) targetState.stores[index] = store;
@@ -774,9 +780,13 @@ function nonDeliveryItems(items = []) {
   return items.filter((item) => !isDeliveryItem(item));
 }
 
-function deliveryFeeFromItems(items = []) {
+function deliveryFeeFromItems(items = [], fallback = DEFAULT_DELIVERY_FEE) {
   const delivery = items.find(isDeliveryItem);
-  return delivery ? Number(delivery.amount || delivery.rate || 0) : DEFAULT_DELIVERY_FEE;
+  return delivery ? Number(delivery.amount || delivery.rate || 0) : fallback;
+}
+
+function storeDeliveryFee(store = selectedStore()) {
+  return store ? deliveryFeeFromItems(store.products || []) : DEFAULT_DELIVERY_FEE;
 }
 
 function itemsWithDelivery(items = []) {
@@ -1298,6 +1308,17 @@ function parseLineItems(lines) {
     const description = line.replace(/\$?\s*[0-9,]+\.\d{2}/g, "").replace(/\b(CS|EA|BX|LB|CT)\b/gi, "").replace(/\s+\d+\s*$/, "").trim();
     if (description) items.push({ description, qty, unit, rate, amount });
   });
+  const deliveryLine = lines.find((line) => /delivery\s+(charge|fee)/i.test(line));
+  if (deliveryLine && !items.some(isDeliveryItem)) {
+    const deliveryAmount = amountsFromText(deliveryLine).at(-1) || 0;
+    items.push({
+      description: "Delivery Charge",
+      qty: "1",
+      unit: "ea",
+      rate: deliveryAmount,
+      amount: deliveryAmount
+    });
+  }
   return items.slice(0, 20);
 }
 
@@ -1717,7 +1738,7 @@ function resetInvoiceForm() {
   els.issueDate.value = routeDate();
   els.invoiceTerms.value = "Net 10";
   els.invoiceRep.value = routeRep();
-  els.deliveryFee.value = DEFAULT_DELIVERY_FEE.toFixed(2);
+  els.deliveryFee.value = "";
   els.customerTotalBalance.value = "";
   els.invoiceTotal.value = "";
   els.paymentsCredits.value = "";
@@ -1803,6 +1824,7 @@ function resetStoreManagerForm() {
   els.storeManagerTitle.textContent = "Add Store";
   els.storeManagerTerms.value = "Net 10";
   els.storeManagerRep.value = DEFAULT_REP;
+  els.storeManagerDeliveryFee.value = "";
   renderStoreManager();
 }
 
@@ -1818,6 +1840,7 @@ function editStoreManager(id) {
   els.storeManagerPo.value = store.poNumber || "";
   els.storeManagerRep.value = store.rep || "";
   els.storeManagerDt.value = store.dt || "";
+  els.storeManagerDeliveryFee.value = storeDeliveryFee(store).toFixed(2);
   els.storeManagerMainPhone.value = store.mainPhone || "";
   els.storeManagerAltPhone.value = store.altPhone || "";
   els.storeManagerInstructions.value = store.specialInstructions || "";
@@ -1829,7 +1852,10 @@ function editStoreManager(id) {
 
 function storeFromManagerForm() {
   const existing = (state.stores || []).find((store) => store.id === els.storeManagerId.value);
-  const deliveryProducts = (existing?.products || []).filter(isDeliveryItem);
+  const deliveryFee = Number(els.storeManagerDeliveryFee.value || 0);
+  const deliveryProducts = deliveryFee > 0
+    ? [{ description: "Delivery Charge", upc: "", unit: "ea", rate: deliveryFee }]
+    : [];
   return {
     id: els.storeManagerId.value || crypto.randomUUID(),
     name: els.storeManagerName.value.trim(),
@@ -1919,6 +1945,7 @@ function loadSelectedStore() {
   els.invoiceDt.value = store.dt || "";
   els.specialInstructions.value = store.specialInstructions || "";
   if (!els.invoiceId.value) {
+    els.deliveryFee.value = storeDeliveryFee(store).toFixed(2);
     els.lineItemsText.value = lineItemsToText(itemsWithDelivery((store.products || []).filter((product) => !isDeliveryItem(product)).map((product) => ({
       description: product.description,
       upc: product.upc || "",
@@ -3066,6 +3093,7 @@ function saveScannedInvoices() {
     altPhone: scan.altPhone || "",
     dt: scan.dt || "",
     items: scan.items || lineItemsFromText(scan.itemsText),
+    deliveryFee: deliveryFeeFromItems(scan.items || lineItemsFromText(scan.itemsText), 0),
     customerTotalBalance: Number(scan.customerTotalBalance || 0),
     total: Number(scan.total || 0),
     paymentsCredits: Number(scan.paymentsCredits || 0),
