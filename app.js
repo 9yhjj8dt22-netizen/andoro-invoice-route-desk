@@ -90,6 +90,7 @@ const sampleData = {
     rep: DEFAULT_REP,
     startingInvoiceNumber: "",
     notes: "",
+    deliverySlots: [],
     receipts: [],
     prospects: []
   },
@@ -359,6 +360,7 @@ const els = {
   routeDayStatus: document.querySelector("#routeDayStatus"),
   routeDayMapsLink: document.querySelector("#routeDayMapsLink"),
   clearRouteDay: document.querySelector("#clearRouteDay"),
+  buildRoute: document.querySelector("#buildRoute"),
   printRouteSummary: document.querySelector("#printRouteSummary")
 };
 
@@ -429,12 +431,41 @@ function normalizeState(nextState) {
   };
   if (!nextState.routeDay.date) nextState.routeDay.date = todayOffset(0);
   if (!nextState.routeDay.rep) nextState.routeDay.rep = DEFAULT_REP;
+  nextState.routeDay.deliverySlots = normalizeRouteDeliverySlots(nextState.routeDay.deliverySlots || []);
   nextState.invoices = (nextState.invoices || []).filter((invoice) => !isDemoInvoice(invoice));
   nextState.stops = (nextState.stops || []).filter((stop) => !["North Lake Supply", "Riverbend Builders"].includes(stop.name));
   nextState.stores = mergeStores(structuredClone(sampleData.stores), nextState.stores || [])
     .map((store) => ({ ...store, name: formatStoreName(store.name, store.address) }));
   nextState.invoices.forEach((invoice) => mergeStoreFromInvoice(nextState, invoice));
   return nextState;
+}
+
+function normalizeRouteDeliverySlots(slots = []) {
+  const bySlot = new Map((Array.isArray(slots) ? slots : [])
+    .map((slot) => [Number(slot.slot), slot])
+    .filter(([slot]) => slot >= 1 && slot <= ROUTE_SLOT_COUNT));
+  return Array.from({ length: ROUTE_SLOT_COUNT }, (_, index) => {
+    const slotNumber = index + 1;
+    const existing = bySlot.get(slotNumber) || {};
+    return {
+      slot: slotNumber,
+      storeId: existing.storeId || "",
+      scanId: existing.scanId || ""
+    };
+  });
+}
+
+function routeDeliverySlots() {
+  state.routeDay = {
+    ...structuredClone(sampleData.routeDay),
+    ...(state.routeDay || {})
+  };
+  state.routeDay.deliverySlots = normalizeRouteDeliverySlots(state.routeDay.deliverySlots || []);
+  return state.routeDay.deliverySlots;
+}
+
+function routeDeliverySlot(slotNumber) {
+  return routeDeliverySlots().find((slot) => Number(slot.slot) === Number(slotNumber));
 }
 
 function isDemoInvoice(invoice) {
@@ -1225,6 +1256,13 @@ function scanLabel(scan = {}) {
   return [scan.customer || "Invoice", scan.number ? `#${scan.number}` : "", scan.fileName || ""].filter(Boolean).join(" - ");
 }
 
+function storeOptionsHtml(selectedId = "") {
+  return [
+    `<option value="">Select store</option>`,
+    ...(state.stores || []).map((store) => `<option value="${escapeAttribute(store.id)}" ${store.id === selectedId ? "selected" : ""}>${escapeHtml(store.name)}</option>`)
+  ].join("");
+}
+
 function scansByRouteSlot() {
   return new Map(routeScans()
     .filter((scan) => Number(scan.routeOrder) >= 1 && Number(scan.routeOrder) <= ROUTE_SLOT_COUNT)
@@ -1234,26 +1272,32 @@ function scansByRouteSlot() {
 function renderRouteDeliverySlots() {
   if (!els.routeDeliverySlots) return;
   const assigned = scansByRouteSlot();
-  const availableScans = [...(state.scans || [])].filter((scan) => scan.accepted !== false);
+  const slots = routeDeliverySlots();
   els.routeDeliverySlots.replaceChildren();
-  for (let slot = 1; slot <= ROUTE_SLOT_COUNT; slot += 1) {
-    const scan = assigned.get(slot);
+  for (const slotRecord of slots) {
+    const slot = Number(slotRecord.slot);
+    const scan = (state.scans || []).find((item) => item.id === slotRecord.scanId) || assigned.get(slot);
+    const selectedStoreId = slotRecord.storeId || scan?.matchedStoreId || "";
+    const selectedStore = (state.stores || []).find((store) => store.id === selectedStoreId);
+    const scanStatus = scan
+      ? [scanLabel(scan), scan.number ? "read" : "needs invoice #", scanLisaHandled(scan) ? "Lisa handles" : "Salesman order"].filter(Boolean).join(" - ")
+      : "Select the store, then attach this stop's invoice.";
     const row = document.createElement("article");
-    row.className = `route-slot${scan ? " filled" : ""}`;
-    const options = [
-      `<option value="">Empty delivery spot</option>`,
-      ...availableScans.map((item) => `<option value="${escapeAttribute(item.id)}" ${item.id === scan?.id ? "selected" : ""}>${escapeHtml(scanLabel(item))}</option>`)
-    ].join("");
+    row.className = `route-slot${scan ? " filled" : ""}${selectedStore ? " store-selected" : ""}`;
     row.innerHTML = `
       <strong>${slot}</strong>
-      <div>
-        <select data-route-slot-scan="${slot}" aria-label="Delivery spot ${slot} invoice">${options}</select>
-        <span>${scan ? escapeHtml([scan.address, scanLisaHandled(scan) ? "Lisa handles" : "Salesman order"].filter(Boolean).join(" - ")) : "Attach or choose one invoice for this delivery spot."}</span>
+      <div class="route-slot-body">
+        <label>
+          Store
+          <select data-route-slot-store="${slot}" aria-label="Delivery spot ${slot} store">${storeOptionsHtml(selectedStoreId)}</select>
+        </label>
+        <span>${escapeHtml(scanStatus)}</span>
       </div>
       <label class="file-button compact-file-button">
         Attach invoice
         <input data-route-slot-file="${slot}" accept="image/*,application/pdf" type="file">
       </label>
+      ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
     `;
     els.routeDeliverySlots.append(row);
   }
@@ -2409,6 +2453,7 @@ function attachEvents() {
   els.clearRouteReceipts.addEventListener("click", clearRouteReceipts);
   els.addProspectStop.addEventListener("click", addProspectStop);
   els.clearRouteDay.addEventListener("click", clearRouteDay);
+  els.buildRoute.addEventListener("click", buildRouteFromDeliverySlots);
   els.printRouteSummary.addEventListener("click", printRouteSummary);
 
   document.addEventListener("click", (event) => {
@@ -2422,6 +2467,7 @@ function attachEvents() {
     const storeManagerItem = event.target.closest("[data-store-manager-id]");
     const deleteReceipt = event.target.closest("[data-delete-receipt]");
     const deleteProspect = event.target.closest("[data-delete-prospect]");
+    const clearRouteSlot = event.target.closest("[data-clear-route-slot]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
     if (deleteInvoice) deleteInvoiceById(deleteInvoice.dataset.deleteInvoice);
     if (emailInvoice) emailInvoiceById(emailInvoice.dataset.emailInvoice);
@@ -2430,6 +2476,10 @@ function attachEvents() {
     if (printInvoice) printInvoiceById(printInvoice.dataset.printInvoice);
     if (caseButton) adjustStoreProductQty(caseButton);
     if (storeManagerItem) editStoreManager(storeManagerItem.dataset.storeManagerId);
+    if (clearRouteSlot) {
+      clearRouteDeliverySlot(clearRouteSlot.dataset.clearRouteSlot);
+      return;
+    }
     if (deleteReceipt) {
       state.routeDay.receipts = (state.routeDay?.receipts || []).filter((receipt) => receipt.id !== deleteReceipt.dataset.deleteReceipt);
       saveState();
@@ -2475,13 +2525,9 @@ function attachEvents() {
       return;
     }
 
-    const routeSlotScan = event.target.dataset.routeSlotScan;
-    if (routeSlotScan) {
-      const scan = (state.scans || []).find((item) => item.id === event.target.value);
-      if (scan) assignScanToRouteSlot(scan, routeSlotScan);
-      else (state.scans || []).forEach((item) => {
-        if (Number(item.routeOrder) === Number(routeSlotScan)) item.routeOrder = "";
-      });
+    const routeSlotStore = event.target.dataset.routeSlotStore;
+    if (routeSlotStore) {
+      setRouteSlotStore(routeSlotStore, event.target.value);
       saveState();
       renderScans();
       return;
@@ -3237,10 +3283,20 @@ function assignScanToRouteSlot(scan, slot) {
     if (item.id !== scan.id && Number(item.routeOrder) === slotNumber) item.routeOrder = "";
   });
   scan.routeOrder = slotNumber;
+  scan.deliverySlot = slotNumber;
+  const slotRecord = routeDeliverySlot(slotNumber);
+  if (slotRecord) slotRecord.scanId = scan.id;
 }
 
 async function processRouteSlotFile(file, slot) {
   if (!file) return;
+  const slotRecord = routeDeliverySlot(slot);
+  const oldScanId = slotRecord?.scanId || "";
+  const store = (state.stores || []).find((item) => item.id === slotRecord?.storeId);
+  if (!store) {
+    alert("Select the store for this delivery spot before attaching the invoice.");
+    return;
+  }
   if (!window.Tesseract) {
     alert("The photo reader could not load. Check your internet connection and try again.");
     return;
@@ -3258,12 +3314,36 @@ async function processRouteSlotFile(file, slot) {
     const text = await readImageInvoice(file, file.name);
     scan = parseInvoiceText(text, file.name);
   }
+  applyStoreToScan(scan, store);
   assignScanToRouteSlot(scan, slot);
   state.scans = state.scans || [];
+  if (oldScanId) state.scans = state.scans.filter((item) => item.id !== oldScanId);
   state.scans.push(scan);
   saveState();
   renderScans();
   els.scanStatus.textContent = `Delivery spot ${slot} loaded: ${file.name}`;
+}
+
+function setRouteSlotStore(slot, storeId) {
+  const slotRecord = routeDeliverySlot(slot);
+  if (!slotRecord) return;
+  slotRecord.storeId = storeId || "";
+  const scan = (state.scans || []).find((item) => item.id === slotRecord.scanId);
+  const store = (state.stores || []).find((item) => item.id === storeId);
+  if (scan && store) applyStoreToScan(scan, store);
+}
+
+function clearRouteDeliverySlot(slot) {
+  const slotRecord = routeDeliverySlot(slot);
+  if (!slotRecord) return;
+  const scanId = slotRecord.scanId;
+  slotRecord.scanId = "";
+  if (scanId) state.scans = (state.scans || []).filter((scan) => scan.id !== scanId);
+  (state.scans || []).forEach((scan) => {
+    if (Number(scan.routeOrder) === Number(slot)) scan.routeOrder = "";
+  });
+  saveState();
+  renderScans();
 }
 
 async function readImageInvoice(imageSource, label) {
@@ -3301,6 +3381,9 @@ async function readPdfInvoice(file) {
 function clearScans() {
   selectedFiles = [];
   state.scans = [];
+  routeDeliverySlots().forEach((slot) => {
+    slot.scanId = "";
+  });
   els.invoiceFiles.value = "";
   els.invoiceCamera.value = "";
   els.photoGrid.replaceChildren();
@@ -3309,16 +3392,26 @@ function clearScans() {
   renderScans();
 }
 
-function saveScannedInvoices() {
-  const notReadyCount = state.scans.filter((scan) => scan.accepted && (!scan.number || (!scan.matchedStoreId && (!scan.customer || !scan.address)))).length;
+function scanReadyToSave(scan = {}) {
+  return Boolean(scan.number && (scan.matchedStoreId || (scan.customer && scan.address)));
+}
+
+function saveScansAsInvoices(scans = []) {
+  const accepted = scans.filter((scan) => scan.accepted !== false);
+  const notReadyCount = accepted.filter((scan) => !scanReadyToSave(scan)).length;
   if (notReadyCount) {
     alert(`${notReadyCount} accepted scan${notReadyCount === 1 ? "" : "s"} need an invoice number and either a matched store or a store name/address before saving.`);
-    return;
+    return null;
   }
-  const accepted = state.scans.filter((scan) => scan.accepted && scan.number && (scan.matchedStoreId || (scan.customer && scan.address)));
-  const lisaCount = accepted.filter((scan) => scanLisaHandled(scan)).length;
+  const ready = accepted.filter(scanReadyToSave);
+  const lisaCount = ready.filter((scan) => scanLisaHandled(scan)).length;
   const invoices = [];
-  accepted.forEach((scan) => {
+  let skipped = 0;
+  ready.forEach((scan) => {
+    if (scan.savedInvoiceId && state.invoices.some((invoice) => invoice.id === scan.savedInvoiceId)) {
+      skipped += 1;
+      return;
+    }
     const scanItems = scan.items || lineItemsFromText(scan.itemsText);
     const invoice = canonicalizeImportedInvoice({
       id: crypto.randomUUID(),
@@ -3348,14 +3441,52 @@ function saveScannedInvoices() {
       lisaHandled: scanLisaHandled(scan)
     });
     invoices.push(invoice);
+    scan.savedInvoiceId = invoice.id;
     mergeStoreFromInvoice(state, invoice);
   });
   state.invoices.unshift(...invoices);
   state.stores = mergeStores([], state.stores || []);
   saveState();
+  return { saved: invoices.length, lisaCount, skipped };
+}
+
+function buildRouteFromDeliverySlots() {
+  const slots = routeDeliverySlots();
+  const filledSlots = slots
+    .map((slot) => ({
+      slot,
+      store: (state.stores || []).find((store) => store.id === slot.storeId),
+      scan: (state.scans || []).find((scan) => scan.id === slot.scanId)
+    }))
+    .filter((entry) => entry.store || entry.scan);
+  if (!filledSlots.length) {
+    alert("Add at least one store and invoice to the delivery spots before building the route.");
+    return;
+  }
+  const missingStore = filledSlots.filter((entry) => !entry.store).length;
+  const missingInvoice = filledSlots.filter((entry) => entry.store && !entry.scan).length;
+  if (missingStore || missingInvoice) {
+    alert(`${missingStore ? `${missingStore} delivery spot${missingStore === 1 ? "" : "s"} need a store. ` : ""}${missingInvoice ? `${missingInvoice} delivery spot${missingInvoice === 1 ? "" : "s"} need an attached invoice.` : ""}`.trim());
+    return;
+  }
+  filledSlots.forEach((entry) => {
+    applyStoreToScan(entry.scan, entry.store);
+    assignScanToRouteSlot(entry.scan, entry.slot.slot);
+    entry.scan.accepted = true;
+  });
+  const result = saveScansAsInvoices(filledSlots.map((entry) => entry.scan));
+  if (!result) return;
+  render();
+  setTab("scan");
+  alert(`Route built. ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${result.lisaCount ? ` ${result.lisaCount} Lisa-handled stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores only.` : ""}`);
+}
+
+function saveScannedInvoices() {
+  const result = saveScansAsInvoices((state.scans || []).filter((scan) => scan.accepted));
+  if (!result) return;
   render();
   setTab("invoices");
-  alert(`${invoices.length} scanned invoice${invoices.length === 1 ? "" : "s"} saved.${lisaCount ? ` ${lisaCount} Lisa-handled stop${lisaCount === 1 ? "" : "s"} saved for records/stores only.` : ""}`);
+  alert(`${result.saved} scanned invoice${result.saved === 1 ? "" : "s"} saved.${result.skipped ? ` ${result.skipped} already saved.` : ""}${result.lisaCount ? ` ${result.lisaCount} Lisa-handled stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores only.` : ""}`);
 }
 
 setupAccessGate();

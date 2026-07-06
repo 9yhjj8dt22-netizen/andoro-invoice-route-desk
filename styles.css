@@ -748,7 +748,7 @@ th {
 
 .route-slot {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
   border: 1px solid var(--line);
@@ -760,6 +760,10 @@ th {
 .route-slot.filled {
   border-color: #b8d4c8;
   background: #eef7f2;
+}
+
+.route-slot.store-selected:not(.filled) {
+  border-color: #d9c7c7;
 }
 
 .route-slot > strong {
@@ -774,13 +778,18 @@ th {
   font-weight: 900;
 }
 
-.route-slot div {
+.route-slot-body {
   min-width: 0;
   display: grid;
   gap: 4px;
 }
 
-.route-slot select {
+.route-slot-body label {
+  margin: 0;
+  gap: 4px;
+}
+
+.route-slot-body select {
   width: 100%;
 }
 
@@ -796,6 +805,12 @@ th {
   min-height: 40px;
   padding: 8px 10px;
   font-size: 0.82rem;
+}
+
+.compact-slot-button {
+  min-height: 40px;
+  padding: 8px 10px;
+  white-space: nowrap;
 }
 
 .route-stop-tools {
@@ -1027,7 +1042,8 @@ th {
     grid-template-columns: 36px minmax(0, 1fr);
   }
 
-  .route-slot .compact-file-button {
+  .route-slot .compact-file-button,
+  .route-slot .compact-slot-button {
     grid-column: 1 / -1;
   }
 
