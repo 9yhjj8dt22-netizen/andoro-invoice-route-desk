@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v35 delivery fees.
+Current live app version: v36 address dedupe.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

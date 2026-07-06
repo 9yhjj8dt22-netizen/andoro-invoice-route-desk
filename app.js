@@ -552,6 +552,31 @@ function normalizedAddress(value = "") {
     .trim();
 }
 
+function addressParts(value = "") {
+  const address = normalizedAddress(value);
+  return {
+    address,
+    numbers: address.match(/\b\d+\b/g) || [],
+    zip: address.match(/\b\d{5}\b/)?.[0] || "",
+    streetNumber: address.match(/^\D*(\d+)/)?.[1] || "",
+    words: address.split(" ").filter((word) => word.length > 2 && !/^\d+$/.test(word))
+  };
+}
+
+function sameStoreAddress(a = "", b = "") {
+  const left = addressParts(a);
+  const right = addressParts(b);
+  if (!left.address || !right.address) return false;
+  if (left.address === right.address) return true;
+  if (left.address.includes(right.address) || right.address.includes(left.address)) return true;
+  if (left.streetNumber && right.streetNumber && left.streetNumber === right.streetNumber) {
+    const sharedWords = left.words.filter((word) => right.words.includes(word));
+    if (sharedWords.length >= 2) return true;
+    if (left.zip && right.zip && left.zip === right.zip && sharedWords.length >= 1) return true;
+  }
+  return false;
+}
+
 function cleanImportedCustomerName(value = "") {
   const lines = String(value).split(/\n|,/).map((line) => line.trim()).filter(Boolean);
   const blocked = /^(bill\s*to|invoice|date|invoice\s*#|special instructions|main tele|alt tele|d\/t|p\.?o\.?|terms|charge|cash|rep|description|qty|u\/m|rate|amount)$/i;
@@ -579,7 +604,8 @@ function storeMatchScore(store = {}, invoice = {}) {
     }
   }
   if (storeAddress && invoiceAddress) {
-    if (storeAddress === invoiceAddress) score += 120;
+    if (sameStoreAddress(store.address || "", invoice.address || "")) score += 150;
+    else if (storeAddress === invoiceAddress) score += 120;
     else if (storeAddress.includes(invoiceAddress) || invoiceAddress.includes(storeAddress)) score += 90;
     const storeNums = storeAddress.match(/\b\d+\b/g) || [];
     const invoiceNums = invoiceAddress.match(/\b\d+\b/g) || [];
@@ -710,31 +736,34 @@ function mergeProducts(products = [], items = []) {
 }
 
 function mergeStores(baseStores = [], incomingStores = []) {
-  const byName = new Map();
+  const stores = [];
   const hasOwn = (item, key) => Object.prototype.hasOwnProperty.call(item, key);
-  baseStores.forEach((store) => {
+  const upsertStore = (store) => {
     if (!store?.name) return;
-    byName.set(store.name.toLowerCase(), {
+    const existingIndex = stores.findIndex((item) => item.name.toLowerCase() === store.name.toLowerCase() || sameStoreAddress(item.address || "", store.address || ""));
+    const existing = existingIndex >= 0 ? stores[existingIndex] : {};
+    const incomingOrderRule = hasOwn(store, "orderBlocked");
+    const merged = {
+      ...existing,
+      ...store,
+      id: existing.id || store.id || crypto.randomUUID(),
+      name: existing.name || store.name,
+      address: existing.address || store.address || "",
+      orderBlocked: incomingOrderRule ? Boolean(store.orderBlocked) : Boolean(existing.orderBlocked),
+      orderBlockedReason: incomingOrderRule ? store.orderBlockedReason || "" : existing.orderBlockedReason || "",
+      products: mergeProducts(existing.products || [], store.products || [])
+    };
+    if (existingIndex >= 0) stores[existingIndex] = merged;
+    else stores.push(merged);
+  };
+  baseStores.forEach((store) => {
+    upsertStore({
       ...store,
       products: mergeProducts([], store.products || [])
     });
   });
-  incomingStores.forEach((store) => {
-    if (!store?.name) return;
-    const key = store.name.toLowerCase();
-    const existing = byName.get(key) || {};
-    const seededOrderRule = hasOwn(existing, "orderBlocked");
-    const incomingOrderRule = hasOwn(store, "orderBlocked");
-    byName.set(key, {
-      ...existing,
-      ...store,
-      id: existing.id || store.id || crypto.randomUUID(),
-      orderBlocked: incomingOrderRule ? Boolean(store.orderBlocked) : Boolean(existing.orderBlocked),
-      orderBlockedReason: incomingOrderRule ? store.orderBlockedReason || "" : existing.orderBlockedReason || "",
-      products: mergeProducts(existing.products || [], store.products || [])
-    });
-  });
-  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  incomingStores.forEach(upsertStore);
+  return stores.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function mergeStoreFromInvoice(targetState, invoice) {
@@ -3075,33 +3104,38 @@ function clearScans() {
 function saveScannedInvoices() {
   const accepted = state.scans.filter((scan) => scan.accepted && !scanLisaHandled(scan));
   const blockedCount = state.scans.filter((scan) => scan.accepted && scanLisaHandled(scan)).length;
-  const invoices = accepted.map((scan) => canonicalizeImportedInvoice({
-    id: crypto.randomUUID(),
-    customer: scan.customer || "Unknown customer",
-    customerEmail: scan.customerEmail || "",
-    address: scan.address || "",
-    number: scan.number || `SCAN-${Date.now()}`,
-    amount: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
-    invoiceDate: scan.invoiceDate || todayOffset(0),
-    terms: scan.terms || "",
-    poNumber: scan.poNumber || "",
-    charge: scan.charge || "",
-    cash: scan.cash || "",
-    rep: scan.rep || "",
-    specialInstructions: scan.specialInstructions || "",
-    mainPhone: scan.mainPhone || "",
-    altPhone: scan.altPhone || "",
-    dt: scan.dt || "",
-    items: scan.items || lineItemsFromText(scan.itemsText),
-    deliveryFee: deliveryFeeFromItems(scan.items || lineItemsFromText(scan.itemsText), 0),
-    customerTotalBalance: Number(scan.customerTotalBalance || 0),
-    total: Number(scan.total || 0),
-    paymentsCredits: Number(scan.paymentsCredits || 0),
-    balanceDue: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
-    sourceFile: scan.fileName || ""
-  }));
+  const invoices = [];
+  accepted.forEach((scan) => {
+    const scanItems = scan.items || lineItemsFromText(scan.itemsText);
+    const invoice = canonicalizeImportedInvoice({
+      id: crypto.randomUUID(),
+      customer: scan.customer || "Unknown customer",
+      customerEmail: scan.customerEmail || "",
+      address: scan.address || "",
+      number: scan.number || `SCAN-${Date.now()}`,
+      amount: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
+      invoiceDate: scan.invoiceDate || todayOffset(0),
+      terms: scan.terms || "",
+      poNumber: scan.poNumber || "",
+      charge: scan.charge || "",
+      cash: scan.cash || "",
+      rep: scan.rep || "",
+      specialInstructions: scan.specialInstructions || "",
+      mainPhone: scan.mainPhone || "",
+      altPhone: scan.altPhone || "",
+      dt: scan.dt || "",
+      items: scanItems,
+      deliveryFee: deliveryFeeFromItems(scanItems, 0),
+      customerTotalBalance: Number(scan.customerTotalBalance || 0),
+      total: Number(scan.total || 0),
+      paymentsCredits: Number(scan.paymentsCredits || 0),
+      balanceDue: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
+      sourceFile: scan.fileName || ""
+    });
+    invoices.push(invoice);
+    mergeStoreFromInvoice(state, invoice);
+  });
   state.invoices.unshift(...invoices);
-  invoices.forEach((invoice) => mergeStoreFromInvoice(state, invoice));
   saveState();
   render();
   setTab("invoices");
