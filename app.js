@@ -2203,7 +2203,7 @@ function invoiceMessage(invoice) {
 function printableInvoiceHtml(invoice) {
   const plainAmount = (value) => Number(value || 0).toFixed(2);
   const itemCount = invoice.items?.length || 1;
-  const printMode = itemCount > 26 ? "ultra-compact" : itemCount > 18 ? "compact" : "";
+  const printMode = itemCount > 24 ? "ultra-compact" : itemCount > 14 ? "compact" : "";
   const rows = (invoice.items || []).map((item) => `
     <tr>
       <td>${escapeHtml(item.description || "")}</td>
@@ -2214,7 +2214,7 @@ function printableInvoiceHtml(invoice) {
       <td>${plainAmount(item.amount || item.rate)}</td>
     </tr>
   `).join("") || `<tr><td>Order</td><td></td><td></td><td></td><td></td><td>${plainAmount(invoiceTotal(invoice))}</td></tr>`;
-  const targetRows = printMode ? 16 : 22;
+  const targetRows = printMode === "ultra-compact" ? 10 : printMode ? 14 : 18;
   const blankRows = Array.from({ length: Math.max(0, targetRows - itemCount) }, () => `
     <tr class="blank-row"><td></td><td></td><td></td><td></td><td></td><td></td></tr>
   `).join("");
@@ -2229,19 +2229,19 @@ function printableInvoiceHtml(invoice) {
     body { margin: 0; background: #f1f1f1; color: #10251d; font-family: Arial, Helvetica, sans-serif; font-size: 12px; }
     .sheet {
       width: 8.5in;
-      height: 11in;
+      height: 10.76in;
       overflow: hidden;
       margin: 20px auto;
-      padding: 0.45in 0.5in 0.35in;
+      padding: 0.34in 0.42in 0.2in;
       background: #fff;
       box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
     }
     .sheet.compact {
-      padding: 0.28in 0.34in 0.18in;
+      padding: 0.23in 0.3in 0.14in;
       font-size: 10.5px;
     }
     .sheet.ultra-compact {
-      padding: 0.22in 0.28in 0.16in;
+      padding: 0.18in 0.25in 0.12in;
       font-size: 9.3px;
     }
     :root { --green: #1f6d48; --green-light: #a8d3b4; --gray-row: #e7e7e2; --red: #9b1f38; }
@@ -2250,37 +2250,49 @@ function printableInvoiceHtml(invoice) {
       grid-template-columns: 1.55in 2.5in 2.65in;
       gap: 18px;
       align-items: start;
-      min-height: 1.6in;
+      min-height: 1.32in;
     }
-    .compact .top { min-height: 1.2in; gap: 10px; }
-    .ultra-compact .top { min-height: 1.05in; gap: 8px; grid-template-columns: 1.35in 2.3in 2.55in; }
+    .compact .top { min-height: 0.98in; gap: 10px; }
+    .ultra-compact .top { min-height: 0.86in; gap: 8px; grid-template-columns: 1.28in 2.2in 2.35in; }
     .logo-wrap { text-align: center; }
-    .logo { width: 1.12in; height: 0.88in; object-fit: contain; display: block; margin: 0 auto 2px; }
-    .tagline { font-family: Georgia, serif; font-size: 11px; font-weight: 700; color: #111; }
+    .logo { width: 1.02in; height: 0.78in; object-fit: contain; display: block; margin: 0 auto 1px; }
+    .compact .logo { width: 0.9in; height: 0.68in; }
+    .ultra-compact .logo { width: 0.78in; height: 0.58in; }
+    .tagline { font-family: Georgia, serif; font-size: 10px; font-weight: 700; color: #111; }
     .address {
       color: #0d3326;
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 900;
       line-height: 1.24;
-      padding-top: 0.45in;
+      padding-top: 0.32in;
     }
-    .invoice-panel { padding-top: 0.17in; }
-    .invoice-title { text-align: right; font-size: 26px; font-weight: 900; margin: 0 0 5px; }
-    .compact .invoice-title { font-size: 22px; }
-    .ultra-compact .invoice-title { font-size: 20px; }
+    .compact .address { padding-top: 0.2in; font-size: 11px; }
+    .ultra-compact .address { padding-top: 0.16in; font-size: 10px; }
+    .invoice-panel { padding-top: 0.07in; }
+    .compact .invoice-panel { padding-top: 0.04in; }
+    .ultra-compact .invoice-panel { padding-top: 0.02in; }
+    .invoice-title { text-align: right; font-size: 21px; font-weight: 900; margin: 0 0 3px; }
+    .compact .invoice-title { font-size: 17px; }
+    .ultra-compact .invoice-title { font-size: 15px; }
     .meta-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      border: 2px solid var(--green);
-      border-radius: 11px;
+      border: 1.5px solid var(--green);
+      border-radius: 7px;
       overflow: hidden;
       text-align: center;
-      font-size: 13px;
+      font-size: 10.5px;
     }
-    .meta-grid .head { background: var(--green-light); font-weight: 900; border-bottom: 2px solid var(--green); }
-    .meta-grid div { padding: 7px 8px; border-right: 2px solid var(--green); min-height: 28px; }
+    .meta-grid .head { background: var(--green-light); font-weight: 900; border-bottom: 1.5px solid var(--green); }
+    .meta-grid div { padding: 3px 5px; border-right: 1.5px solid var(--green); min-height: 20px; }
     .meta-grid div:nth-child(2n) { border-right: 0; }
-    .meta-grid .value { background: #f3f4ef; font-size: 14px; }
+    .meta-grid .value { background: #f3f4ef; font-size: 11px; }
+    .compact .meta-grid { font-size: 9px; border-radius: 5px; }
+    .compact .meta-grid div { min-height: 17px; padding: 2px 4px; }
+    .compact .meta-grid .value { font-size: 9.5px; }
+    .ultra-compact .meta-grid { font-size: 8px; border-radius: 4px; }
+    .ultra-compact .meta-grid div { min-height: 15px; padding: 1px 3px; }
+    .ultra-compact .meta-grid .value { font-size: 8.5px; }
     .upper {
       display: grid;
       grid-template-columns: 1fr 2.65in;
@@ -2423,34 +2435,38 @@ function printableInvoiceHtml(invoice) {
       display: grid;
       grid-template-columns: 1fr 1fr 1.9fr 1.7fr;
       margin: 0 auto;
-      width: 88%;
+      width: 86%;
       border-left: 2px solid var(--green);
       border-bottom: 2px solid var(--green);
       text-align: center;
-      font-size: 13px;
+      font-size: 10.5px;
     }
-    .footer div { border-right: 2px solid var(--green); border-top: 2px solid var(--green); padding: 7px 6px; min-height: 30px; }
+    .footer div { border-right: 2px solid var(--green); border-top: 2px solid var(--green); padding: 4px 5px; min-height: 21px; }
+    .compact .footer { font-size: 9px; }
+    .compact .footer div { padding: 3px 4px; min-height: 18px; }
+    .ultra-compact .footer { font-size: 8px; }
+    .ultra-compact .footer div { padding: 2px 3px; min-height: 15px; }
     .footer .foot-head {
       background: #edf3eb;
       color: #0d3326;
       font-style: italic;
     }
     .signature-copy {
-      margin-top: 10px;
+      margin-top: 5px;
       width: 3.1in;
       margin-left: auto;
       border-bottom: 2px solid var(--green);
-      min-height: 0.72in;
+      min-height: 0.44in;
       display: grid;
       align-items: end;
       justify-items: center;
       padding-bottom: 4px;
     }
-    .compact .signature-copy { margin-top: 5px; min-height: 0.46in; }
-    .ultra-compact .signature-copy { margin-top: 3px; min-height: 0.34in; }
+    .compact .signature-copy { margin-top: 3px; min-height: 0.3in; }
+    .ultra-compact .signature-copy { margin-top: 2px; min-height: 0.22in; }
     .signature-copy img {
       max-width: 100%;
-      max-height: 0.58in;
+      max-height: 0.34in;
       object-fit: contain;
     }
     .signature-label {
@@ -2460,13 +2476,16 @@ function printableInvoiceHtml(invoice) {
       text-align: center;
       color: #0d3326;
       font-weight: 900;
+      font-size: 10px;
     }
+    .compact .signature-label { font-size: 8.5px; padding-top: 1px; }
+    .ultra-compact .signature-label { font-size: 7.5px; padding-top: 1px; }
     @media print {
       body { background: #fff; }
       .sheet {
         margin: 0;
         width: 8.5in;
-        height: 11in;
+        height: 10.76in;
         box-shadow: none;
       }
     }
