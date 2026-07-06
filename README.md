@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v39 store-first route delivery slots.
+Current live app version: v40 persistent local store edits and deletions.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

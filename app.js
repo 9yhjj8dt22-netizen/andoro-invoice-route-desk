@@ -85,6 +85,7 @@ const sampleData = {
   invoices: [],
   stops: [],
   optimizedStopIds: [],
+  deletedStoreIds: [],
   routeDay: {
     date: "",
     rep: DEFAULT_REP,
@@ -434,7 +435,11 @@ function normalizeState(nextState) {
   nextState.routeDay.deliverySlots = normalizeRouteDeliverySlots(nextState.routeDay.deliverySlots || []);
   nextState.invoices = (nextState.invoices || []).filter((invoice) => !isDemoInvoice(invoice));
   nextState.stops = (nextState.stops || []).filter((stop) => !["North Lake Supply", "Riverbend Builders"].includes(stop.name));
-  nextState.stores = mergeStores(structuredClone(sampleData.stores), nextState.stores || [])
+  nextState.deletedStoreIds = Array.isArray(nextState.deletedStoreIds) ? nextState.deletedStoreIds : [];
+  const deletedStoreIds = new Set(nextState.deletedStoreIds);
+  const seededStores = structuredClone(sampleData.stores).filter((store) => !deletedStoreIds.has(store.id));
+  nextState.stores = mergeStores(seededStores, nextState.stores || [])
+    .filter((store) => !deletedStoreIds.has(store.id))
     .map((store) => ({ ...store, name: formatStoreName(store.name, store.address) }));
   nextState.invoices.forEach((invoice) => mergeStoreFromInvoice(nextState, invoice));
   return nextState;
@@ -844,18 +849,20 @@ function mergeStores(baseStores = [], incomingStores = []) {
   const upsertStore = (store) => {
     if (!store?.name) return;
     const formattedName = formatStoreName(store.name, store.address);
-    const existingIndex = stores.findIndex((item) => item.name.toLowerCase() === formattedName.toLowerCase() || item.name.toLowerCase() === store.name.toLowerCase() || sameStoreAddress(item.address || "", store.address || ""));
+    const existingIndex = stores.findIndex((item) => item.id === store.id || item.name.toLowerCase() === formattedName.toLowerCase() || item.name.toLowerCase() === store.name.toLowerCase() || sameStoreAddress(item.address || "", store.address || ""));
     const existing = existingIndex >= 0 ? stores[existingIndex] : {};
     const incomingOrderRule = hasOwn(store, "orderBlocked");
+    const incomingProducts = hasOwn(store, "products");
+    const address = hasOwn(store, "address") ? store.address || "" : existing.address || "";
     const merged = {
       ...existing,
       ...store,
       id: existing.id || store.id || crypto.randomUUID(),
-      name: formatStoreName(existing.name || formattedName || store.name, existing.address || store.address || ""),
-      address: existing.address || store.address || "",
+      name: formatStoreName(store.name || existing.name || formattedName, address),
+      address,
       orderBlocked: incomingOrderRule ? Boolean(store.orderBlocked) : Boolean(existing.orderBlocked),
       orderBlockedReason: incomingOrderRule ? store.orderBlockedReason || "" : existing.orderBlockedReason || "",
-      products: mergeProducts(existing.products || [], store.products || [])
+      products: incomingProducts ? mergeProducts([], store.products || []) : mergeProducts(existing.products || [], [])
     };
     if (existingIndex >= 0) stores[existingIndex] = merged;
     else stores.push(merged);
@@ -2103,6 +2110,8 @@ function deleteStoreManager() {
   if (!id) return;
   const store = (state.stores || []).find((item) => item.id === id);
   if (!store || !confirm(`Delete ${store.name}?`)) return;
+  state.deletedStoreIds = Array.isArray(state.deletedStoreIds) ? state.deletedStoreIds : [];
+  if (!state.deletedStoreIds.includes(id)) state.deletedStoreIds.push(id);
   state.stores = state.stores.filter((item) => item.id !== id);
   saveState();
   renderStores();
