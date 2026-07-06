@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v34.
+Current live app version: v34 import fix.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
