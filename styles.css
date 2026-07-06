@@ -352,6 +352,47 @@ textarea {
   gap: 8px;
 }
 
+.store-manager-list {
+  display: grid;
+  gap: 8px;
+}
+
+.store-manager-item {
+  width: 100%;
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  background: #fff;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px;
+  white-space: normal;
+}
+
+.store-manager-item.active,
+.store-manager-item:hover {
+  border-color: var(--red);
+  background: var(--cream);
+}
+
+.store-manager-item strong,
+.store-manager-item span,
+.store-manager-item small {
+  display: block;
+}
+
+.store-manager-item span,
+.store-manager-item small {
+  color: var(--muted);
+}
+
+.store-manager-checkbox {
+  align-items: start;
+  justify-content: start;
+  min-height: auto;
+}
+
 .store-products-title {
   color: var(--green-dark);
   font-weight: 900;
@@ -858,7 +899,7 @@ th {
   }
 
   .nav-tabs {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
   }
 
   .tab-button {

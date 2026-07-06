@@ -4,6 +4,7 @@ const ACCESS_CODE = "andoro1957";
 const TAB_HEADERS = {
   invoices: "Check Store Needs - Build Order - Get Signature - Print / Share",
   scan: "Route Organizer / Summary",
+  stores: "Stores / Products / Account Rules",
   settings: "Office Contact / Backup / Reset"
 };
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -244,6 +245,28 @@ const els = {
   saveStore: document.querySelector("#saveStore"),
   storeProductList: document.querySelector("#storeProductList"),
   storeOrderNotice: document.querySelector("#storeOrderNotice"),
+  storeManagerSearch: document.querySelector("#storeManagerSearch"),
+  storeManagerList: document.querySelector("#storeManagerList"),
+  storeManagerForm: document.querySelector("#storeManagerForm"),
+  storeManagerTitle: document.querySelector("#storeManagerTitle"),
+  storeManagerId: document.querySelector("#storeManagerId"),
+  storeManagerName: document.querySelector("#storeManagerName"),
+  storeManagerEmail: document.querySelector("#storeManagerEmail"),
+  storeManagerAddress: document.querySelector("#storeManagerAddress"),
+  storeManagerTerms: document.querySelector("#storeManagerTerms"),
+  storeManagerPo: document.querySelector("#storeManagerPo"),
+  storeManagerRep: document.querySelector("#storeManagerRep"),
+  storeManagerDt: document.querySelector("#storeManagerDt"),
+  storeManagerMainPhone: document.querySelector("#storeManagerMainPhone"),
+  storeManagerAltPhone: document.querySelector("#storeManagerAltPhone"),
+  storeManagerInstructions: document.querySelector("#storeManagerInstructions"),
+  storeManagerBlocked: document.querySelector("#storeManagerBlocked"),
+  storeManagerBlockedReason: document.querySelector("#storeManagerBlockedReason"),
+  storeManagerProducts: document.querySelector("#storeManagerProducts"),
+  newStoreRecord: document.querySelector("#newStoreRecord"),
+  clearStoreManager: document.querySelector("#clearStoreManager"),
+  saveStoreManager: document.querySelector("#saveStoreManager"),
+  deleteStoreManager: document.querySelector("#deleteStoreManager"),
   customerName: document.querySelector("#customerName"),
   customerEmail: document.querySelector("#customerEmail"),
   serviceAddress: document.querySelector("#serviceAddress"),
@@ -482,6 +505,7 @@ function render() {
 
   renderAttention();
   renderStores();
+  renderStoreManager();
   renderInvoices();
   renderRoute();
   renderScans();
@@ -625,12 +649,13 @@ function mergeStores(baseStores = [], incomingStores = []) {
     const key = store.name.toLowerCase();
     const existing = byName.get(key) || {};
     const seededOrderRule = hasOwn(existing, "orderBlocked");
+    const incomingOrderRule = hasOwn(store, "orderBlocked");
     byName.set(key, {
       ...existing,
       ...store,
       id: existing.id || store.id || crypto.randomUUID(),
-      orderBlocked: seededOrderRule ? existing.orderBlocked : Boolean(store.orderBlocked),
-      orderBlockedReason: seededOrderRule ? existing.orderBlockedReason || "" : store.orderBlockedReason || "",
+      orderBlocked: incomingOrderRule ? Boolean(store.orderBlocked) : Boolean(existing.orderBlocked),
+      orderBlockedReason: incomingOrderRule ? store.orderBlockedReason || "" : existing.orderBlockedReason || "",
       products: mergeProducts(existing.products || [], store.products || [])
     });
   });
@@ -1624,6 +1649,139 @@ function storeFromForm(existingId = "") {
   };
 }
 
+function storeProductsToText(products = []) {
+  return (products || [])
+    .filter((product) => !isDeliveryItem(product))
+    .map((product) => [
+      product.description || "",
+      product.upc || "",
+      product.unit || "ea",
+      product.rate ?? ""
+    ].join(" | "))
+    .join("\n");
+}
+
+function storeProductsFromText(text = "") {
+  return text.split("\n").map((line) => {
+    const parts = line.split("|").map((part) => part.trim());
+    if (!parts[0]) return null;
+    return normalizeProduct({
+      description: parts[0],
+      upc: parts[1] || "",
+      unit: parts[2] || "ea",
+      rate: Number(parts[3] || 0)
+    });
+  }).filter(Boolean);
+}
+
+function renderStoreManager() {
+  const query = normalizedName(els.storeManagerSearch?.value || "");
+  const selectedId = els.storeManagerId?.value || "";
+  const stores = [...(state.stores || [])]
+    .filter((store) => !query || normalizedName(`${store.name} ${store.address}`).includes(query))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  els.storeManagerList.replaceChildren();
+  if (!stores.length) {
+    els.storeManagerList.append(emptyState());
+    return;
+  }
+  stores.forEach((store) => {
+    const button = document.createElement("button");
+    button.className = `store-manager-item${store.id === selectedId ? " active" : ""}`;
+    button.type = "button";
+    button.dataset.storeManagerId = store.id;
+    button.innerHTML = `
+      <strong>${escapeHtml(store.name)}</strong>
+      <span>${escapeHtml([store.address?.split("\n").at(-1), store.orderBlocked ? "Lisa handles" : "Salesman orders"].filter(Boolean).join(" - "))}</span>
+      <small>${(store.products || []).filter((product) => !isDeliveryItem(product)).length} product${(store.products || []).length === 1 ? "" : "s"}</small>
+    `;
+    els.storeManagerList.append(button);
+  });
+}
+
+function resetStoreManagerForm() {
+  els.storeManagerForm.reset();
+  els.storeManagerId.value = "";
+  els.storeManagerTitle.textContent = "Add Store";
+  els.storeManagerTerms.value = "Net 10";
+  els.storeManagerRep.value = DEFAULT_REP;
+  renderStoreManager();
+}
+
+function editStoreManager(id) {
+  const store = (state.stores || []).find((item) => item.id === id);
+  if (!store) return;
+  els.storeManagerId.value = store.id;
+  els.storeManagerTitle.textContent = "Edit Store";
+  els.storeManagerName.value = store.name || "";
+  els.storeManagerEmail.value = store.email || "";
+  els.storeManagerAddress.value = store.address || "";
+  els.storeManagerTerms.value = store.terms || "";
+  els.storeManagerPo.value = store.poNumber || "";
+  els.storeManagerRep.value = store.rep || "";
+  els.storeManagerDt.value = store.dt || "";
+  els.storeManagerMainPhone.value = store.mainPhone || "";
+  els.storeManagerAltPhone.value = store.altPhone || "";
+  els.storeManagerInstructions.value = store.specialInstructions || "";
+  els.storeManagerBlocked.checked = Boolean(store.orderBlocked);
+  els.storeManagerBlockedReason.value = store.orderBlockedReason || "";
+  els.storeManagerProducts.value = storeProductsToText(store.products || []);
+  renderStoreManager();
+}
+
+function storeFromManagerForm() {
+  const existing = (state.stores || []).find((store) => store.id === els.storeManagerId.value);
+  const deliveryProducts = (existing?.products || []).filter(isDeliveryItem);
+  return {
+    id: els.storeManagerId.value || crypto.randomUUID(),
+    name: els.storeManagerName.value.trim(),
+    email: els.storeManagerEmail.value.trim(),
+    address: els.storeManagerAddress.value.trim(),
+    terms: els.storeManagerTerms.value.trim(),
+    poNumber: els.storeManagerPo.value.trim(),
+    rep: els.storeManagerRep.value.trim(),
+    dt: els.storeManagerDt.value.trim(),
+    mainPhone: els.storeManagerMainPhone.value.trim(),
+    altPhone: els.storeManagerAltPhone.value.trim(),
+    specialInstructions: els.storeManagerInstructions.value.trim(),
+    orderBlocked: els.storeManagerBlocked.checked,
+    orderBlockedReason: els.storeManagerBlockedReason.value.trim(),
+    products: mergeProducts([], [...storeProductsFromText(els.storeManagerProducts.value), ...deliveryProducts])
+  };
+}
+
+function saveStoreManagerForm(event) {
+  event.preventDefault();
+  if (!els.storeManagerName.value.trim()) {
+    alert("Enter the store name first.");
+    els.storeManagerName.focus();
+    return;
+  }
+  const store = storeFromManagerForm();
+  const duplicate = (state.stores || []).find((item) => item.id !== store.id && item.name.toLowerCase() === store.name.toLowerCase());
+  if (duplicate && !confirm("A store with that name already exists. Save this one anyway?")) return;
+  state.stores = state.stores || [];
+  const index = state.stores.findIndex((item) => item.id === store.id);
+  if (index >= 0) state.stores[index] = store;
+  else state.stores.push(store);
+  state.stores = mergeStores([], state.stores);
+  saveState();
+  renderStores();
+  editStoreManager(store.id);
+  alert("Store saved.");
+}
+
+function deleteStoreManager() {
+  const id = els.storeManagerId.value;
+  if (!id) return;
+  const store = (state.stores || []).find((item) => item.id === id);
+  if (!store || !confirm(`Delete ${store.name}?`)) return;
+  state.stores = state.stores.filter((item) => item.id !== id);
+  saveState();
+  renderStores();
+  resetStoreManagerForm();
+}
+
 function saveStoreFromForm() {
   if (!els.customerName.value.trim()) {
     alert("Enter the store name first.");
@@ -1639,6 +1797,7 @@ function saveStoreFromForm() {
   else state.stores.push(store);
   saveState();
   renderStores();
+  renderStoreManager();
   els.storeSelect.value = store.id;
   alert("Store saved.");
 }
@@ -1923,6 +2082,11 @@ function attachEvents() {
   els.invoiceForm.addEventListener("submit", saveInvoiceFromForm);
   els.storeSelect.addEventListener("change", loadSelectedStore);
   els.saveStore.addEventListener("click", saveStoreFromForm);
+  els.storeManagerForm.addEventListener("submit", saveStoreManagerForm);
+  els.storeManagerSearch.addEventListener("input", renderStoreManager);
+  els.newStoreRecord.addEventListener("click", resetStoreManagerForm);
+  els.clearStoreManager.addEventListener("click", resetStoreManagerForm);
+  els.deleteStoreManager.addEventListener("click", deleteStoreManager);
   els.clearInvoiceForm.addEventListener("click", resetInvoiceForm);
   els.clearSignature.addEventListener("click", clearSignaturePad);
   els.saveAndPrintInvoice.addEventListener("click", saveAndPrintInvoice);
@@ -1970,6 +2134,7 @@ function attachEvents() {
     const shareInvoice = event.target.closest("[data-share-invoice]");
     const printInvoice = event.target.closest("[data-print-invoice]");
     const caseButton = event.target.closest("[data-case-key]");
+    const storeManagerItem = event.target.closest("[data-store-manager-id]");
     const deleteReceipt = event.target.closest("[data-delete-receipt]");
     const deleteProspect = event.target.closest("[data-delete-prospect]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
@@ -1979,6 +2144,7 @@ function attachEvents() {
     if (shareInvoice) shareInvoiceById(shareInvoice.dataset.shareInvoice);
     if (printInvoice) printInvoiceById(printInvoice.dataset.printInvoice);
     if (caseButton) adjustStoreProductQty(caseButton);
+    if (storeManagerItem) editStoreManager(storeManagerItem.dataset.storeManagerId);
     if (deleteReceipt) {
       state.routeDay.receipts = (state.routeDay?.receipts || []).filter((receipt) => receipt.id !== deleteReceipt.dataset.deleteReceipt);
       saveState();

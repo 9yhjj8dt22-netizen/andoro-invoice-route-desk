@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "32";
+        const currentVersion = "33";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v32")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v33")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=32">
+    <link rel="stylesheet" href="styles.css?v=33">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -60,6 +60,7 @@
         <nav class="nav-tabs" aria-label="Main views">
           <button class="tab-button active" data-tab="invoices" type="button">Invoice</button>
           <button class="tab-button" data-tab="scan" type="button">Today's Route</button>
+          <button class="tab-button" data-tab="stores" type="button">Stores</button>
           <button class="tab-button" data-tab="settings" type="button">Office</button>
         </nav>
       </aside>
@@ -506,6 +507,91 @@
           </div>
         </section>
 
+        <section class="tab-panel" id="stores">
+          <div class="split-layout">
+            <section class="work-panel">
+              <div class="panel-heading controls-heading">
+                <h2>Saved Stores</h2>
+                <div class="control-row">
+                  <input id="storeManagerSearch" placeholder="Search stores">
+                  <button class="secondary-button" id="newStoreRecord" type="button">New store</button>
+                </div>
+              </div>
+              <div class="store-manager-list" id="storeManagerList"></div>
+            </section>
+
+            <form class="editor-panel" id="storeManagerForm">
+              <div class="panel-heading">
+                <h2 id="storeManagerTitle">Add Store</h2>
+                <button class="ghost-button" id="clearStoreManager" type="button">Clear</button>
+              </div>
+              <input id="storeManagerId" type="hidden">
+              <label>
+                Store name
+                <input id="storeManagerName" required placeholder="Store name">
+              </label>
+              <label>
+                Email
+                <input id="storeManagerEmail" inputmode="email" type="email" placeholder="customer@example.com">
+              </label>
+              <label>
+                Address
+                <textarea id="storeManagerAddress" rows="3" placeholder="Street, city, state"></textarea>
+              </label>
+              <div class="field-row">
+                <label>
+                  Terms
+                  <input id="storeManagerTerms" placeholder="Net 10">
+                </label>
+                <label>
+                  P.O. No.
+                  <input id="storeManagerPo" placeholder="PO note">
+                </label>
+              </div>
+              <div class="field-row">
+                <label>
+                  Rep
+                  <input id="storeManagerRep" placeholder="J.Ballew">
+                </label>
+                <label>
+                  D/T
+                  <input id="storeManagerDt" placeholder="Delivery time or note">
+                </label>
+              </div>
+              <div class="field-row">
+                <label>
+                  Main phone
+                  <input id="storeManagerMainPhone" placeholder="Main phone">
+                </label>
+                <label>
+                  Alt phone
+                  <input id="storeManagerAltPhone" placeholder="Alt phone">
+                </label>
+              </div>
+              <label>
+                Special instructions
+                <textarea id="storeManagerInstructions" rows="3" placeholder="Store notes"></textarea>
+              </label>
+              <label class="checkbox-label store-manager-checkbox">
+                <input id="storeManagerBlocked" type="checkbox">
+                Lisa handles this store / do not allow salesman orders
+              </label>
+              <label>
+                Lisa note
+                <input id="storeManagerBlockedReason" placeholder="Reason shown when orders are blocked">
+              </label>
+              <label>
+                Products
+                <textarea id="storeManagerProducts" rows="10" placeholder="Description | UPC | U/M | Rate"></textarea>
+              </label>
+              <div class="button-row">
+                <button class="primary-button" id="saveStoreManager" type="submit">Save store</button>
+                <button class="danger-button" id="deleteStoreManager" type="button">Delete store</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
         <section class="tab-panel" id="settings">
           <div class="two-column">
             <section class="work-panel">
@@ -562,7 +648,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=32"></script>
+    <script src="app.js?v=33"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
