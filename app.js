@@ -2283,22 +2283,24 @@ function printableInvoiceHtml(invoice) {
     .meta-grid .value { background: #f3f4ef; font-size: 14px; }
     .upper {
       display: grid;
-      grid-template-columns: 1fr 2.8in;
-      gap: 0.55in;
-      min-height: 1.38in;
-      margin-top: 0.18in;
+      grid-template-columns: 1fr 2.65in;
+      gap: 0.38in;
+      min-height: 0.96in;
+      margin-top: 0.08in;
     }
-    .compact .upper { min-height: 1.05in; margin-top: 0.1in; }
-    .ultra-compact .upper { min-height: 0.88in; margin-top: 0.07in; }
-    .bill-label { margin-left: 0.36in; font-size: 13px; }
-    .bill-body { margin-top: 0.16in; margin-left: 0.18in; font-size: 17px; line-height: 1.18; white-space: pre-wrap; }
-    .compact .bill-body { font-size: 14px; line-height: 1.08; }
-    .ultra-compact .bill-body { font-size: 12px; line-height: 1.03; }
-    .instructions { padding-top: 0.02in; font-style: italic; font-size: 14px; line-height: 1.7; }
-    .compact .instructions { font-size: 12px; line-height: 1.35; }
-    .ultra-compact .instructions { font-size: 10.5px; line-height: 1.18; }
-    .instructions h2 { margin: 0 0 4px; font-size: 15px; color: #0d3326; font-style: italic; }
-    .instructions .row { display: grid; grid-template-columns: 0.92in 1fr; gap: 8px; }
+    .compact .upper { min-height: 0.78in; margin-top: 0.05in; }
+    .ultra-compact .upper { min-height: 0.64in; margin-top: 0.03in; }
+    .bill-label { margin-left: 0.24in; font-size: 11px; }
+    .bill-body { margin-top: 0.07in; margin-left: 0.12in; font-size: 13px; line-height: 1.06; white-space: pre-wrap; }
+    .compact .bill-body { font-size: 11px; line-height: 1.02; margin-top: 0.04in; }
+    .ultra-compact .bill-body { font-size: 9.5px; line-height: 1; margin-top: 0.03in; }
+    .instructions { padding-top: 0; font-style: italic; font-size: 11.5px; line-height: 1.22; }
+    .compact .instructions { font-size: 10px; line-height: 1.1; }
+    .ultra-compact .instructions { font-size: 8.8px; line-height: 1.02; }
+    .instructions h2 { margin: 0 0 2px; font-size: 12px; color: #0d3326; font-style: italic; }
+    .compact .instructions h2 { font-size: 10.5px; }
+    .ultra-compact .instructions h2 { font-size: 9px; }
+    .instructions .row { display: grid; grid-template-columns: 0.72in 1fr; gap: 5px; }
     .pre-table {
       display: grid;
       grid-template-columns: 1.5fr 1.35fr 1.05fr 1.1fr 0.95fr;
