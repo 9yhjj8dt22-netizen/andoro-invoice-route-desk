@@ -539,6 +539,85 @@ function normalizedName(value = "") {
   return String(value).trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function normalizedAddress(value = "") {
+  return normalizedName(value)
+    .replace(/\b(missouri|mo)\b/g, "mo")
+    .replace(/\b(street|st)\b/g, "st")
+    .replace(/\b(road|rd)\b/g, "rd")
+    .replace(/\b(drive|dr)\b/g, "dr")
+    .replace(/\b(boulevard|blvd)\b/g, "blvd")
+    .replace(/\b(highway|hwy)\b/g, "hwy")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanImportedCustomerName(value = "") {
+  const lines = String(value).split(/\n|,/).map((line) => line.trim()).filter(Boolean);
+  const blocked = /^(bill\s*to|invoice|date|invoice\s*#|special instructions|main tele|alt tele|d\/t|p\.?o\.?|terms|charge|cash|rep|description|qty|u\/m|rate|amount)$/i;
+  return (lines.find((line) => !blocked.test(line) && !looksLikeAddressLine(line) && !/^\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}$/.test(line)) || "").trim();
+}
+
+function looksLikeAddressLine(line = "") {
+  return /^\d+\s+/.test(line) || /\b(mo|missouri|il|street|st\.?|road|rd\.?|drive|dr\.?|boulevard|blvd\.?|highway|hwy|trail|lane|ln\.?|route|rte)\b/i.test(line);
+}
+
+function storeMatchScore(store = {}, invoice = {}) {
+  const storeName = normalizedName(store.name);
+  const invoiceName = normalizedName(cleanImportedCustomerName(invoice.customer || ""));
+  const storeAddress = normalizedAddress(store.address || "");
+  const invoiceAddress = normalizedAddress(invoice.address || "");
+  let score = 0;
+  if (storeName && invoiceName) {
+    if (storeName === invoiceName) score += 100;
+    else if (storeName.includes(invoiceName) || invoiceName.includes(storeName)) score += 70;
+    else {
+      const storeTokens = new Set(storeName.split(" ").filter((token) => token.length > 2));
+      const invoiceTokens = invoiceName.split(" ").filter((token) => token.length > 2);
+      const matches = invoiceTokens.filter((token) => storeTokens.has(token)).length;
+      score += matches * 14;
+    }
+  }
+  if (storeAddress && invoiceAddress) {
+    if (storeAddress === invoiceAddress) score += 120;
+    else if (storeAddress.includes(invoiceAddress) || invoiceAddress.includes(storeAddress)) score += 90;
+    const storeNums = storeAddress.match(/\b\d+\b/g) || [];
+    const invoiceNums = invoiceAddress.match(/\b\d+\b/g) || [];
+    if (storeNums.some((num) => invoiceNums.includes(num))) score += 45;
+    const storeCity = storeAddress.split(" ").slice(-3).join(" ");
+    const invoiceCity = invoiceAddress.split(" ").slice(-3).join(" ");
+    if (storeCity && invoiceCity && (storeCity.includes(invoiceCity) || invoiceCity.includes(storeCity))) score += 20;
+  }
+  return score;
+}
+
+function matchingStoreForInvoice(invoice = {}, stores = state.stores || []) {
+  const ranked = [...stores]
+    .map((store) => ({ store, score: storeMatchScore(store, invoice) }))
+    .sort((a, b) => b.score - a.score);
+  return ranked[0]?.score >= 70 ? ranked[0].store : null;
+}
+
+function canonicalizeImportedInvoice(invoice = {}, stores = state.stores || []) {
+  const cleanedCustomer = cleanImportedCustomerName(invoice.customer || "") || invoice.customer || "";
+  const candidate = { ...invoice, customer: cleanedCustomer };
+  const store = matchingStoreForInvoice(candidate, stores);
+  if (!store) return { ...invoice, customer: cleanedCustomer };
+  return {
+    ...invoice,
+    customer: store.name,
+    customerEmail: invoice.customerEmail || store.email || "",
+    address: store.address || invoice.address || "",
+    terms: invoice.terms || store.terms || "",
+    poNumber: invoice.poNumber || store.poNumber || "",
+    rep: invoice.rep || store.rep || "",
+    mainPhone: invoice.mainPhone || store.mainPhone || "",
+    altPhone: invoice.altPhone || store.altPhone || "",
+    dt: invoice.dt || store.dt || "",
+    specialInstructions: invoice.specialInstructions || store.specialInstructions || "",
+    matchedStoreId: store.id
+  };
+}
+
 function routeScanForStore(store = selectedStore()) {
   if (!store?.name) return null;
   const storeName = normalizedName(store.name);
@@ -584,12 +663,7 @@ function renderStoreOrderNotice() {
 }
 
 function invoiceStore(invoice = {}) {
-  const customer = normalizedName(invoice.customer);
-  if (!customer) return null;
-  return (state.stores || []).find((store) => {
-    const storeName = normalizedName(store.name);
-    return storeName === customer || storeName.includes(customer) || customer.includes(storeName);
-  });
+  return matchingStoreForInvoice(invoice);
 }
 
 function invoiceBlocksOrders(invoice = {}) {
@@ -665,10 +739,11 @@ function mergeStores(baseStores = [], incomingStores = []) {
 function mergeStoreFromInvoice(targetState, invoice) {
   if (!invoice?.customer) return;
   targetState.stores = targetState.stores || [];
-  const existing = targetState.stores.find((store) => store.name.toLowerCase() === invoice.customer.toLowerCase());
+  const matched = matchingStoreForInvoice(invoice, targetState.stores);
+  const existing = matched || targetState.stores.find((store) => store.name.toLowerCase() === invoice.customer.toLowerCase());
   const store = {
     id: existing?.id || crypto.randomUUID(),
-    name: invoice.customer,
+    name: existing?.name || invoice.customer,
     email: invoice.customerEmail || existing?.email || "",
     address: invoice.address || existing?.address || "",
     terms: invoice.terms || existing?.terms || "",
@@ -1104,27 +1179,39 @@ function parseInvoiceText(rawText, fileName) {
   const totals = parseTotals(text, amountMatches);
   const items = parseLineItems(lines);
   const terms = findValueAfterLabel(lines, /^terms$/i) || text.match(/\bNet\s*\d+\b/i)?.[0] || "";
-  const customer = billTo.customer || findCustomer(lines, invoiceNumber);
-  const matchedStore = invoiceStore({ customer });
-  return {
-    id: crypto.randomUUID(),
-    accepted: true,
-    fileName,
-    customer,
-    lisaHandled: Boolean(matchedStore?.orderBlocked),
-    customerEmail: text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "",
+  const rawCustomer = billTo.customer || findCustomer(lines, invoiceNumber);
+  const imported = canonicalizeImportedInvoice({
+    customer: rawCustomer,
     address: billTo.address || findAddress(lines),
-    number: invoiceNumber,
-    invoiceDate: dateMatches[0] || todayOffset(0),
+    customerEmail: text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0] || "",
     terms,
     poNumber: findValueAfterLabel(lines, /p\.?o\.?\s*no/i),
-    charge: findValueAfterLabel(lines, /^charge$/i),
-    cash: findValueAfterLabel(lines, /^cash$/i),
     rep: findValueAfterLabel(lines, /^rep$/i) || text.match(/\bRep\s+([A-Z]{1,4})\b/i)?.[1] || "",
     specialInstructions: parseSpecialInstructions(lines),
     mainPhone: text.match(/Main\s+Tele[:\s]+([0-9()\-\s]+)/i)?.[1]?.trim() || "",
     altPhone: text.match(/Alt\s+Tele[:\s]+([0-9()\-\s]+)/i)?.[1]?.trim() || "",
-    dt: text.match(/\bD\/T[:\s]*([^\n]+)/i)?.[1]?.trim() || "",
+    dt: text.match(/\bD\/T[:\s]*([^\n]+)/i)?.[1]?.trim() || ""
+  });
+  const matchedStore = invoiceStore(imported);
+  return {
+    id: crypto.randomUUID(),
+    accepted: true,
+    fileName,
+    customer: imported.customer,
+    lisaHandled: Boolean(matchedStore?.orderBlocked),
+    customerEmail: imported.customerEmail || "",
+    address: imported.address || "",
+    number: invoiceNumber,
+    invoiceDate: dateMatches[0] || todayOffset(0),
+    terms: imported.terms || "",
+    poNumber: imported.poNumber || "",
+    charge: findValueAfterLabel(lines, /^charge$/i),
+    cash: findValueAfterLabel(lines, /^cash$/i),
+    rep: imported.rep || "",
+    specialInstructions: imported.specialInstructions || "",
+    mainPhone: imported.mainPhone || "",
+    altPhone: imported.altPhone || "",
+    dt: imported.dt || "",
     items,
     itemsText: lineItemsToText(items),
     customerTotalBalance: totals.customerTotalBalance,
@@ -1145,8 +1232,19 @@ function amountsFromText(text) {
 function parseBillTo(lines) {
   const billIndex = lines.findIndex((line) => /bill\s*to/i.test(line));
   if (billIndex < 0) return { customer: "", address: "" };
-  const block = lines.slice(billIndex + 1, billIndex + 5).filter((line) => !/special instructions|p\.?o\.?|terms|description/i.test(line));
-  return { customer: block[0] || "", address: block.slice(1).join(", ") };
+  const block = [];
+  for (const line of lines.slice(billIndex + 1, billIndex + 8)) {
+    if (/special instructions|p\.?o\.?|terms|description|qty|u\/m|rate|amount|invoice/i.test(line)) break;
+    if (/^bill\s*to$/i.test(line)) continue;
+    block.push(line);
+  }
+  const customerIndex = block.findIndex((line) => !looksLikeAddressLine(line));
+  const customer = customerIndex >= 0 ? cleanImportedCustomerName(block[customerIndex]) : "";
+  const address = block
+    .filter((line, index) => index !== customerIndex)
+    .filter((line) => looksLikeAddressLine(line) || /\b[A-Z]{2}\s+\d{5}\b/i.test(line))
+    .join(", ");
+  return { customer, address };
 }
 
 function invoiceNumberNearDate(lines) {
@@ -2950,7 +3048,7 @@ function clearScans() {
 function saveScannedInvoices() {
   const accepted = state.scans.filter((scan) => scan.accepted && !scanLisaHandled(scan));
   const blockedCount = state.scans.filter((scan) => scan.accepted && scanLisaHandled(scan)).length;
-  const invoices = accepted.map((scan) => ({
+  const invoices = accepted.map((scan) => canonicalizeImportedInvoice({
     id: crypto.randomUUID(),
     customer: scan.customer || "Unknown customer",
     customerEmail: scan.customerEmail || "",
