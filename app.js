@@ -592,6 +592,7 @@ function storeMatchScore(store = {}, invoice = {}) {
   const invoiceName = normalizedName(cleanImportedCustomerName(invoice.customer || ""));
   const storeAddress = normalizedAddress(store.address || "");
   const invoiceAddress = normalizedAddress(invoice.address || "");
+  const invoiceText = normalizedName(invoice.rawText || "");
   let score = 0;
   if (storeName && invoiceName) {
     if (storeName === invoiceName) score += 100;
@@ -614,6 +615,15 @@ function storeMatchScore(store = {}, invoice = {}) {
     const invoiceCity = invoiceAddress.split(" ").slice(-3).join(" ");
     if (storeCity && invoiceCity && (storeCity.includes(invoiceCity) || invoiceCity.includes(storeCity))) score += 20;
   }
+  if (invoiceText) {
+    if (storeName && invoiceText.includes(storeName)) score += 90;
+    const parts = addressParts(store.address || "");
+    if (parts.streetNumber && invoiceText.includes(parts.streetNumber)) {
+      const sharedWords = parts.words.filter((word) => invoiceText.includes(word));
+      if (sharedWords.length >= 2) score += 140;
+      else if (parts.zip && invoiceText.includes(parts.zip) && sharedWords.length >= 1) score += 120;
+    }
+  }
   return score;
 }
 
@@ -627,7 +637,7 @@ function matchingStoreForInvoice(invoice = {}, stores = state.stores || []) {
 function canonicalizeImportedInvoice(invoice = {}, stores = state.stores || []) {
   const cleanedCustomer = cleanImportedCustomerName(invoice.customer || "") || invoice.customer || "";
   const candidate = { ...invoice, customer: cleanedCustomer };
-  const store = matchingStoreForInvoice(candidate, stores);
+  const store = stores.find((item) => item.id === invoice.matchedStoreId) || matchingStoreForInvoice(candidate, stores);
   if (!store) return { ...invoice, customer: cleanedCustomer };
   return {
     ...invoice,
@@ -662,6 +672,24 @@ function routeLisaOverride(store = selectedStore()) {
 function scanLisaHandled(scan = {}) {
   if (typeof scan.lisaHandled === "boolean") return scan.lisaHandled;
   return Boolean(invoiceStore({ customer: scan.customer })?.orderBlocked);
+}
+
+function applyStoreToScan(scan, store) {
+  if (!scan || !store) return;
+  scan.matchedStoreId = store.id;
+  scan.customer = store.name || scan.customer;
+  scan.customerEmail = scan.customerEmail || store.email || "";
+  scan.address = store.address || scan.address || "";
+  scan.terms = scan.terms || store.terms || "";
+  scan.poNumber = scan.poNumber || store.poNumber || "";
+  scan.rep = scan.rep || store.rep || "";
+  scan.mainPhone = scan.mainPhone || store.mainPhone || "";
+  scan.altPhone = scan.altPhone || store.altPhone || "";
+  scan.dt = scan.dt || store.dt || "";
+  scan.specialInstructions = scan.specialInstructions || store.specialInstructions || "";
+  scan.lisaHandled = Boolean(store.orderBlocked);
+  scan.importWarning = scan.number ? "" : "Needs invoice number";
+  scan.accepted = Boolean(scan.number);
 }
 
 function storeBlocksOrders(store = selectedStore()) {
@@ -1076,13 +1104,23 @@ function renderScans() {
 
   state.scans.forEach((scan) => {
     const lisaHandled = scanLisaHandled(scan);
+    const matchedStore = scan.matchedStoreId
+      ? (state.stores || []).find((store) => store.id === scan.matchedStoreId)
+      : invoiceStore(scan);
+    const importReady = Boolean(matchedStore && scan.number);
+    const storeOptions = [
+      `<option value="">Choose store match</option>`,
+      ...(state.stores || []).map((store) => `<option value="${escapeAttribute(store.id)}" ${store.id === matchedStore?.id ? "selected" : ""}>${escapeHtml(store.name)}</option>`)
+    ].join("");
     const card = document.createElement("article");
     card.className = "scan-card";
     card.innerHTML = `
       <header>
         <strong>${escapeHtml(scan.fileName || "Invoice photo")}</strong>
-        <label><input data-scan-accepted="${scan.id}" type="checkbox" ${scan.accepted ? "checked" : ""}> Accept</label>
+        <label><input data-scan-accepted="${scan.id}" type="checkbox" ${scan.accepted ? "checked" : ""} ${importReady ? "" : "disabled"}> Accept</label>
       </header>
+      <div class="import-status ${importReady ? "ready" : "needs-review"}">${importReady ? `Matched: ${escapeHtml(matchedStore.name)}` : escapeHtml(scan.importWarning || "Needs review before saving")}</div>
+      <label>Matched saved store<select data-scan-store="${scan.id}">${storeOptions}</select></label>
       <div class="route-stop-tools">
         <label>Route order<input data-scan-field="routeOrder" data-scan-id="${scan.id}" inputmode="numeric" type="number" min="1" step="1" value="${escapeAttribute(scan.routeOrder || "")}"></label>
         <label class="checkbox-label"><input data-scan-lisa="${scan.id}" type="checkbox" ${lisaHandled ? "checked" : ""}> Lisa handles</label>
@@ -1229,14 +1267,17 @@ function parseInvoiceText(rawText, fileName) {
     specialInstructions: parseSpecialInstructions(lines),
     mainPhone: text.match(/Main\s+Tele[:\s]+([0-9()\-\s]+)/i)?.[1]?.trim() || "",
     altPhone: text.match(/Alt\s+Tele[:\s]+([0-9()\-\s]+)/i)?.[1]?.trim() || "",
-    dt: text.match(/\bD\/T[:\s]*([^\n]+)/i)?.[1]?.trim() || ""
+    dt: text.match(/\bD\/T[:\s]*([^\n]+)/i)?.[1]?.trim() || "",
+    rawText: text
   });
   const matchedStore = invoiceStore(imported);
   return {
     id: crypto.randomUUID(),
-    accepted: true,
+    accepted: Boolean(matchedStore && invoiceNumber),
     fileName,
     customer: imported.customer,
+    matchedStoreId: matchedStore?.id || imported.matchedStoreId || "",
+    importWarning: !matchedStore ? "Needs store match" : !invoiceNumber ? "Needs invoice number" : "",
     lisaHandled: Boolean(matchedStore?.orderBlocked),
     customerEmail: imported.customerEmail || "",
     address: imported.address || "",
@@ -2336,6 +2377,22 @@ function attachEvents() {
   });
 
   document.addEventListener("change", (event) => {
+    const storeScanId = event.target.dataset.scanStore;
+    if (storeScanId) {
+      const scan = state.scans.find((item) => item.id === storeScanId);
+      const store = (state.stores || []).find((item) => item.id === event.target.value);
+      if (!scan) return;
+      if (store) applyStoreToScan(scan, store);
+      else {
+        scan.matchedStoreId = "";
+        scan.accepted = false;
+        scan.importWarning = "Needs store match";
+      }
+      saveState();
+      renderScans();
+      return;
+    }
+
     const lisaId = event.target.dataset.scanLisa;
     if (lisaId) {
       const scan = state.scans.find((item) => item.id === lisaId);
@@ -3102,7 +3159,12 @@ function clearScans() {
 }
 
 function saveScannedInvoices() {
-  const accepted = state.scans.filter((scan) => scan.accepted && !scanLisaHandled(scan));
+  const unmatchedCount = state.scans.filter((scan) => scan.accepted && !scan.matchedStoreId).length;
+  if (unmatchedCount) {
+    alert(`${unmatchedCount} accepted scan${unmatchedCount === 1 ? "" : "s"} need a matched saved store before saving.`);
+    return;
+  }
+  const accepted = state.scans.filter((scan) => scan.accepted && scan.matchedStoreId && !scanLisaHandled(scan));
   const blockedCount = state.scans.filter((scan) => scan.accepted && scanLisaHandled(scan)).length;
   const invoices = [];
   accepted.forEach((scan) => {
@@ -3110,6 +3172,7 @@ function saveScannedInvoices() {
     const invoice = canonicalizeImportedInvoice({
       id: crypto.randomUUID(),
       customer: scan.customer || "Unknown customer",
+      matchedStoreId: scan.matchedStoreId || "",
       customerEmail: scan.customerEmail || "",
       address: scan.address || "",
       number: scan.number || `SCAN-${Date.now()}`,

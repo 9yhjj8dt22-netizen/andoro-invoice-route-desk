@@ -863,6 +863,24 @@ th {
   min-height: 90px;
 }
 
+.import-status {
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-weight: 900;
+}
+
+.import-status.ready {
+  background: #e8f2ed;
+  color: var(--green-dark);
+  border: 1px solid #b8d4c8;
+}
+
+.import-status.needs-review {
+  background: #fff5f4;
+  color: var(--red);
+  border: 1px solid #f0b8b4;
+}
+
 .category-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
