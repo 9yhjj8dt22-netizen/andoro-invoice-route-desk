@@ -1,6 +1,8 @@
 const STORAGE_KEY = "andoro_invoice_route_desk_v2";
+const STORES_STORAGE_KEY = "andoro_saved_stores_v1";
 const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
+const ROUTE_SLOT_COUNT = 25;
 const TAB_HEADERS = {
   invoices: "Check Store Needs - Build Order - Get Signature - Print / Share",
   scan: "Route Organizer / Summary",
@@ -343,6 +345,7 @@ const els = {
   routeDayRep: document.querySelector("#routeDayRep"),
   routeStartInvoice: document.querySelector("#routeStartInvoice"),
   routeDayNotes: document.querySelector("#routeDayNotes"),
+  routeDeliverySlots: document.querySelector("#routeDeliverySlots"),
   routeReceiptFiles: document.querySelector("#routeReceiptFiles"),
   routeReceiptCamera: document.querySelector("#routeReceiptCamera"),
   clearRouteReceipts: document.querySelector("#clearRouteReceipts"),
@@ -395,16 +398,27 @@ function todayOffset(days) {
 
 function loadState() {
   const saved = localStorage.getItem(STORAGE_KEY);
-  if (!saved) return structuredClone(sampleData);
+  const savedStores = loadSavedStores();
+  if (!saved) return normalizeState({ ...structuredClone(sampleData), stores: mergeStores(structuredClone(sampleData.stores), savedStores) });
   try {
     const parsed = JSON.parse(saved);
     return normalizeState({
       ...structuredClone(sampleData),
       ...parsed,
+      stores: mergeStores(parsed.stores || [], savedStores),
       settings: { ...structuredClone(sampleData.settings), ...(parsed.settings || {}) }
     });
   } catch {
-    return structuredClone(sampleData);
+    return normalizeState({ ...structuredClone(sampleData), stores: mergeStores(structuredClone(sampleData.stores), savedStores) });
+  }
+}
+
+function loadSavedStores() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORES_STORAGE_KEY) || "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
   }
 }
 
@@ -417,7 +431,8 @@ function normalizeState(nextState) {
   if (!nextState.routeDay.rep) nextState.routeDay.rep = DEFAULT_REP;
   nextState.invoices = (nextState.invoices || []).filter((invoice) => !isDemoInvoice(invoice));
   nextState.stops = (nextState.stops || []).filter((stop) => !["North Lake Supply", "Riverbend Builders"].includes(stop.name));
-  nextState.stores = mergeStores(structuredClone(sampleData.stores), nextState.stores || []);
+  nextState.stores = mergeStores(structuredClone(sampleData.stores), nextState.stores || [])
+    .map((store) => ({ ...store, name: formatStoreName(store.name, store.address) }));
   nextState.invoices.forEach((invoice) => mergeStoreFromInvoice(nextState, invoice));
   return nextState;
 }
@@ -429,6 +444,7 @@ function isDemoInvoice(invoice) {
 
 function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  localStorage.setItem(STORES_STORAGE_KEY, JSON.stringify(state.stores || []));
 }
 
 function setTab(tabId) {
@@ -577,6 +593,34 @@ function sameStoreAddress(a = "", b = "") {
   return false;
 }
 
+function locationFromAddress(address = "") {
+  const cityStateLine = String(address).split(/\n|,/).map((line) => line.trim()).find((line) => /\b[A-Z]{2}\s+\d{5}\b/i.test(line));
+  if (!cityStateLine) return "";
+  return cityStateLine.replace(/\b[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/i, "").replace(/^[,\s]+|[,\s]+$/g, "").trim();
+}
+
+function formatStoreName(name = "", address = "") {
+  const cleanName = String(name).replace(/\s+/g, " ").trim().replace(/^Hy,\s*Vee\b/i, "Hy-Vee");
+  if (!cleanName || cleanName.includes(",")) return cleanName;
+  const paren = cleanName.match(/^(.+?)\s*\((.+?)\)\s*(.*)$/);
+  if (paren) {
+    const location = paren[2].replace(/[-#]+/g, " ").replace(/\s+/g, " ").trim();
+    const suffix = paren[3]?.trim();
+    return `${paren[1].trim()}, ${[location, suffix].filter(Boolean).join(" ")}`;
+  }
+  const dash = cleanName.match(/^(.+?)\s*[-–]\s+(.+)$/);
+  if (dash) return `${dash[1].trim()}, ${dash[2].trim()}`;
+  const city = locationFromAddress(address);
+  if (!city) return cleanName;
+  const normalizedCity = normalizedName(city);
+  const normalizedStore = normalizedName(cleanName);
+  if (normalizedStore.startsWith(`${normalizedCity} `)) {
+    const storePart = cleanName.slice(city.length).trim();
+    return storePart ? `${storePart}, ${city}` : cleanName;
+  }
+  return normalizedStore.includes(normalizedCity) ? cleanName : `${cleanName}, ${city}`;
+}
+
 function cleanImportedCustomerName(value = "") {
   const lines = String(value).split(/\n|,/).map((line) => line.trim()).filter(Boolean);
   const blocked = /^(bill\s*to|invoice|date|invoice\s*#|special instructions|main tele|alt tele|d\/t|p\.?o\.?|terms|charge|cash|rep|description|qty|u\/m|rate|amount)$/i;
@@ -699,8 +743,8 @@ function storeBlocksOrders(store = selectedStore()) {
 }
 
 function orderBlockedMessage(store = selectedStore()) {
-  if (routeLisaOverride(store)) return "Lisa handles this stop today. Do not create, save, print, or share an invoice for this store.";
-  return store?.orderBlockedReason || "This store is marked Lisa only. Do not create an invoice for this store.";
+  if (routeLisaOverride(store)) return "Lisa handles this stop today. Do not create, print, or share a salesman order for this store.";
+  return store?.orderBlockedReason || "This store is marked Lisa only. Do not create a salesman order for this store.";
 }
 
 function setInvoiceActionsEnabled(enabled) {
@@ -768,14 +812,15 @@ function mergeStores(baseStores = [], incomingStores = []) {
   const hasOwn = (item, key) => Object.prototype.hasOwnProperty.call(item, key);
   const upsertStore = (store) => {
     if (!store?.name) return;
-    const existingIndex = stores.findIndex((item) => item.name.toLowerCase() === store.name.toLowerCase() || sameStoreAddress(item.address || "", store.address || ""));
+    const formattedName = formatStoreName(store.name, store.address);
+    const existingIndex = stores.findIndex((item) => item.name.toLowerCase() === formattedName.toLowerCase() || item.name.toLowerCase() === store.name.toLowerCase() || sameStoreAddress(item.address || "", store.address || ""));
     const existing = existingIndex >= 0 ? stores[existingIndex] : {};
     const incomingOrderRule = hasOwn(store, "orderBlocked");
     const merged = {
       ...existing,
       ...store,
       id: existing.id || store.id || crypto.randomUUID(),
-      name: existing.name || store.name,
+      name: formatStoreName(existing.name || formattedName || store.name, existing.address || store.address || ""),
       address: existing.address || store.address || "",
       orderBlocked: incomingOrderRule ? Boolean(store.orderBlocked) : Boolean(existing.orderBlocked),
       orderBlockedReason: incomingOrderRule ? store.orderBlockedReason || "" : existing.orderBlockedReason || "",
@@ -806,13 +851,13 @@ function mergeStoreFromInvoice(targetState, invoice) {
     : [];
   const store = {
     id: existing?.id || crypto.randomUUID(),
-    name: existing?.name || invoice.customer,
+    name: formatStoreName(existing?.name || invoice.customer, invoice.address || existing?.address || ""),
     email: invoice.customerEmail || existing?.email || "",
     address: invoice.address || existing?.address || "",
     terms: invoice.terms || existing?.terms || "",
     poNumber: invoice.poNumber || existing?.poNumber || "",
     rep: invoice.rep || existing?.rep || "",
-    orderBlocked: existing?.orderBlocked || false,
+    orderBlocked: existing?.orderBlocked || Boolean(invoice.lisaHandled),
     orderBlockedReason: existing?.orderBlockedReason || "",
     mainPhone: invoice.mainPhone || existing?.mainPhone || "",
     altPhone: invoice.altPhone || existing?.altPhone || "",
@@ -1079,6 +1124,7 @@ function renderScans() {
   if (!state.scans.length) {
     els.scanResults.append(emptyState());
     els.scanSummary.append(emptyState());
+    renderRouteDeliverySlots();
     renderRouteDayStatus();
     return;
   }
@@ -1107,7 +1153,8 @@ function renderScans() {
     const matchedStore = scan.matchedStoreId
       ? (state.stores || []).find((store) => store.id === scan.matchedStoreId)
       : invoiceStore(scan);
-    const importReady = Boolean(matchedStore && scan.number);
+    const canCreateStore = Boolean(scan.customer && scan.address);
+    const importReady = Boolean(scan.number && (matchedStore || canCreateStore));
     const storeOptions = [
       `<option value="">Choose store match</option>`,
       ...(state.stores || []).map((store) => `<option value="${escapeAttribute(store.id)}" ${store.id === matchedStore?.id ? "selected" : ""}>${escapeHtml(store.name)}</option>`)
@@ -1119,7 +1166,7 @@ function renderScans() {
         <strong>${escapeHtml(scan.fileName || "Invoice photo")}</strong>
         <label><input data-scan-accepted="${scan.id}" type="checkbox" ${scan.accepted ? "checked" : ""} ${importReady ? "" : "disabled"}> Accept</label>
       </header>
-      <div class="import-status ${importReady ? "ready" : "needs-review"}">${importReady ? `Matched: ${escapeHtml(matchedStore.name)}` : escapeHtml(scan.importWarning || "Needs review before saving")}</div>
+      <div class="import-status ${importReady ? "ready" : "needs-review"}">${importReady ? `${matchedStore ? `Matched: ${escapeHtml(matchedStore.name)}` : "Ready: will save as a new store"}` : escapeHtml(scan.importWarning || "Needs invoice number plus store/address before saving")}</div>
       <label>Matched saved store<select data-scan-store="${scan.id}">${storeOptions}</select></label>
       <div class="route-stop-tools">
         <label>Route order<input data-scan-field="routeOrder" data-scan-id="${scan.id}" inputmode="numeric" type="number" min="1" step="1" value="${escapeAttribute(scan.routeOrder || "")}"></label>
@@ -1159,6 +1206,7 @@ function renderScans() {
     `;
     els.scanResults.append(card);
   });
+  renderRouteDeliverySlots();
   renderRouteDayStatus();
 }
 
@@ -1171,6 +1219,44 @@ function routeScans() {
       if (orderA !== orderB) return orderA - orderB;
       return String(a.customer || "").localeCompare(String(b.customer || ""));
     });
+}
+
+function scanLabel(scan = {}) {
+  return [scan.customer || "Invoice", scan.number ? `#${scan.number}` : "", scan.fileName || ""].filter(Boolean).join(" - ");
+}
+
+function scansByRouteSlot() {
+  return new Map(routeScans()
+    .filter((scan) => Number(scan.routeOrder) >= 1 && Number(scan.routeOrder) <= ROUTE_SLOT_COUNT)
+    .map((scan) => [Number(scan.routeOrder), scan]));
+}
+
+function renderRouteDeliverySlots() {
+  if (!els.routeDeliverySlots) return;
+  const assigned = scansByRouteSlot();
+  const availableScans = [...(state.scans || [])].filter((scan) => scan.accepted !== false);
+  els.routeDeliverySlots.replaceChildren();
+  for (let slot = 1; slot <= ROUTE_SLOT_COUNT; slot += 1) {
+    const scan = assigned.get(slot);
+    const row = document.createElement("article");
+    row.className = `route-slot${scan ? " filled" : ""}`;
+    const options = [
+      `<option value="">Empty delivery spot</option>`,
+      ...availableScans.map((item) => `<option value="${escapeAttribute(item.id)}" ${item.id === scan?.id ? "selected" : ""}>${escapeHtml(scanLabel(item))}</option>`)
+    ].join("");
+    row.innerHTML = `
+      <strong>${slot}</strong>
+      <div>
+        <select data-route-slot-scan="${slot}" aria-label="Delivery spot ${slot} invoice">${options}</select>
+        <span>${scan ? escapeHtml([scan.address, scanLisaHandled(scan) ? "Lisa handles" : "Salesman order"].filter(Boolean).join(" - ")) : "Attach or choose one invoice for this delivery spot."}</span>
+      </div>
+      <label class="file-button compact-file-button">
+        Attach invoice
+        <input data-route-slot-file="${slot}" accept="image/*,application/pdf" type="file">
+      </label>
+    `;
+    els.routeDeliverySlots.append(row);
+  }
 }
 
 function renderRouteDayStatus() {
@@ -1201,6 +1287,7 @@ function renderRouteDayStatus() {
 }
 
 function renderRouteDayCapture() {
+  renderRouteDeliverySlots();
   const receipts = state.routeDay?.receipts || [];
   els.routeReceiptGrid.replaceChildren();
   if (!receipts.length) {
@@ -1820,11 +1907,12 @@ function resetInvoiceForm() {
 
 function storeFromForm(existingId = "") {
   const existing = (state.stores || []).find((store) => store.id === existingId);
+  const address = els.serviceAddress.value.trim();
   return {
     id: existingId || crypto.randomUUID(),
-    name: els.customerName.value.trim(),
+    name: formatStoreName(els.customerName.value.trim(), address),
     email: els.customerEmail.value.trim(),
-    address: els.serviceAddress.value.trim(),
+    address,
     terms: els.invoiceTerms.value.trim(),
     poNumber: els.poNumber.value.trim(),
     rep: els.invoiceRep.value.trim(),
@@ -1923,14 +2011,15 @@ function editStoreManager(id) {
 function storeFromManagerForm() {
   const existing = (state.stores || []).find((store) => store.id === els.storeManagerId.value);
   const deliveryFee = Number(els.storeManagerDeliveryFee.value || 0);
+  const address = els.storeManagerAddress.value.trim();
   const deliveryProducts = deliveryFee > 0
     ? [{ description: "Delivery Charge", upc: "", unit: "ea", rate: deliveryFee }]
     : [];
   return {
     id: els.storeManagerId.value || crypto.randomUUID(),
-    name: els.storeManagerName.value.trim(),
+    name: formatStoreName(els.storeManagerName.value.trim(), address),
     email: els.storeManagerEmail.value.trim(),
-    address: els.storeManagerAddress.value.trim(),
+    address,
     terms: els.storeManagerTerms.value.trim(),
     poNumber: els.storeManagerPo.value.trim(),
     rep: els.storeManagerRep.value.trim(),
@@ -1952,8 +2041,8 @@ function saveStoreManagerForm(event) {
     return;
   }
   const store = storeFromManagerForm();
-  const duplicate = (state.stores || []).find((item) => item.id !== store.id && item.name.toLowerCase() === store.name.toLowerCase());
-  if (duplicate && !confirm("A store with that name already exists. Save this one anyway?")) return;
+  const duplicate = (state.stores || []).find((item) => item.id !== store.id && (item.name.toLowerCase() === store.name.toLowerCase() || sameStoreAddress(item.address || "", store.address || "")));
+  if (duplicate && !confirm("A store with that name or address already exists. Save this one anyway?")) return;
   state.stores = state.stores || [];
   const index = state.stores.findIndex((item) => item.id === store.id);
   if (index >= 0) state.stores[index] = store;
@@ -1983,7 +2072,8 @@ function saveStoreFromForm() {
   }
   state.stores = state.stores || [];
   const selectedId = els.storeSelect.value;
-  const duplicate = state.stores.find((store) => store.name.toLowerCase() === els.customerName.value.trim().toLowerCase());
+  const formName = formatStoreName(els.customerName.value.trim(), els.serviceAddress.value.trim());
+  const duplicate = state.stores.find((store) => store.name.toLowerCase() === formName.toLowerCase() || sameStoreAddress(store.address || "", els.serviceAddress.value.trim()));
   const id = selectedId || duplicate?.id || "";
   const store = storeFromForm(id);
   const index = state.stores.findIndex((item) => item.id === store.id);
@@ -2372,11 +2462,31 @@ function attachEvents() {
     }
     saveState();
     if (field === "routeOrder" || field === "routeNote" || field === "address" || field === "customer") {
+      if (field === "routeOrder") renderRouteDeliverySlots();
       renderRouteDayStatus();
     }
   });
 
   document.addEventListener("change", (event) => {
+    const routeSlotFile = event.target.dataset.routeSlotFile;
+    if (routeSlotFile) {
+      processRouteSlotFile(event.target.files?.[0], routeSlotFile);
+      event.target.value = "";
+      return;
+    }
+
+    const routeSlotScan = event.target.dataset.routeSlotScan;
+    if (routeSlotScan) {
+      const scan = (state.scans || []).find((item) => item.id === event.target.value);
+      if (scan) assignScanToRouteSlot(scan, routeSlotScan);
+      else (state.scans || []).forEach((item) => {
+        if (Number(item.routeOrder) === Number(routeSlotScan)) item.routeOrder = "";
+      });
+      saveState();
+      renderScans();
+      return;
+    }
+
     const storeScanId = event.target.dataset.scanStore;
     if (storeScanId) {
       const scan = state.scans.find((item) => item.id === storeScanId);
@@ -3042,7 +3152,7 @@ function importData(event) {
   const reader = new FileReader();
   reader.onload = () => {
     try {
-      state = JSON.parse(reader.result);
+      state = normalizeState(JSON.parse(reader.result));
       saveState();
       render();
     } catch {
@@ -3103,16 +3213,57 @@ async function processPhotos() {
     els.scanStatus.textContent = `Reading ${index + 1} of ${selectedFiles.length}: ${file.name}`;
     if (file.type === "application/pdf") {
       const pages = await readPdfInvoice(file);
-      pages.forEach((page) => state.scans.push(parseInvoiceText(page.text, page.fileName)));
+      pages.forEach((page, pageIndex) => {
+        const scan = parseInvoiceText(page.text, page.fileName);
+        if (index + pageIndex < ROUTE_SLOT_COUNT) assignScanToRouteSlot(scan, index + pageIndex + 1);
+        state.scans.push(scan);
+      });
     } else {
       const text = await readImageInvoice(file, file.name);
-      state.scans.push(parseInvoiceText(text, file.name));
+      const scan = parseInvoiceText(text, file.name);
+      if (index < ROUTE_SLOT_COUNT) assignScanToRouteSlot(scan, index + 1);
+      state.scans.push(scan);
     }
     saveState();
     renderScans();
   }
   els.processPhotos.disabled = false;
   els.scanStatus.textContent = `Finished reading ${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"}`;
+}
+
+function assignScanToRouteSlot(scan, slot) {
+  const slotNumber = Math.max(1, Math.min(ROUTE_SLOT_COUNT, Number(slot) || 1));
+  (state.scans || []).forEach((item) => {
+    if (item.id !== scan.id && Number(item.routeOrder) === slotNumber) item.routeOrder = "";
+  });
+  scan.routeOrder = slotNumber;
+}
+
+async function processRouteSlotFile(file, slot) {
+  if (!file) return;
+  if (!window.Tesseract) {
+    alert("The photo reader could not load. Check your internet connection and try again.");
+    return;
+  }
+  if (file.type === "application/pdf" && !window.pdfjsLib) {
+    alert("The PDF reader could not load. Check your internet connection and try again.");
+    return;
+  }
+  els.scanStatus.textContent = `Reading delivery spot ${slot}: ${file.name}`;
+  let scan;
+  if (file.type === "application/pdf") {
+    const pages = await readPdfInvoice(file);
+    scan = parseInvoiceText(pages[0]?.text || "", pages[0]?.fileName || file.name);
+  } else {
+    const text = await readImageInvoice(file, file.name);
+    scan = parseInvoiceText(text, file.name);
+  }
+  assignScanToRouteSlot(scan, slot);
+  state.scans = state.scans || [];
+  state.scans.push(scan);
+  saveState();
+  renderScans();
+  els.scanStatus.textContent = `Delivery spot ${slot} loaded: ${file.name}`;
 }
 
 async function readImageInvoice(imageSource, label) {
@@ -3159,13 +3310,13 @@ function clearScans() {
 }
 
 function saveScannedInvoices() {
-  const unmatchedCount = state.scans.filter((scan) => scan.accepted && !scan.matchedStoreId).length;
-  if (unmatchedCount) {
-    alert(`${unmatchedCount} accepted scan${unmatchedCount === 1 ? "" : "s"} need a matched saved store before saving.`);
+  const notReadyCount = state.scans.filter((scan) => scan.accepted && (!scan.number || (!scan.matchedStoreId && (!scan.customer || !scan.address)))).length;
+  if (notReadyCount) {
+    alert(`${notReadyCount} accepted scan${notReadyCount === 1 ? "" : "s"} need an invoice number and either a matched store or a store name/address before saving.`);
     return;
   }
-  const accepted = state.scans.filter((scan) => scan.accepted && scan.matchedStoreId && !scanLisaHandled(scan));
-  const blockedCount = state.scans.filter((scan) => scan.accepted && scanLisaHandled(scan)).length;
+  const accepted = state.scans.filter((scan) => scan.accepted && scan.number && (scan.matchedStoreId || (scan.customer && scan.address)));
+  const lisaCount = accepted.filter((scan) => scanLisaHandled(scan)).length;
   const invoices = [];
   accepted.forEach((scan) => {
     const scanItems = scan.items || lineItemsFromText(scan.itemsText);
@@ -3193,16 +3344,18 @@ function saveScannedInvoices() {
       total: Number(scan.total || 0),
       paymentsCredits: Number(scan.paymentsCredits || 0),
       balanceDue: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
-      sourceFile: scan.fileName || ""
+      sourceFile: scan.fileName || "",
+      lisaHandled: scanLisaHandled(scan)
     });
     invoices.push(invoice);
     mergeStoreFromInvoice(state, invoice);
   });
   state.invoices.unshift(...invoices);
+  state.stores = mergeStores([], state.stores || []);
   saveState();
   render();
   setTab("invoices");
-  if (blockedCount) alert(`${blockedCount} Lisa-handled stop${blockedCount === 1 ? "" : "s"} were not saved as invoices.`);
+  alert(`${invoices.length} scanned invoice${invoices.length === 1 ? "" : "s"} saved.${lisaCount ? ` ${lisaCount} Lisa-handled stop${lisaCount === 1 ? "" : "s"} saved for records/stores only.` : ""}`);
 }
 
 setupAccessGate();

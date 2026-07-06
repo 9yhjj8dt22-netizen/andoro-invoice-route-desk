@@ -724,6 +724,80 @@ th {
   margin-bottom: 18px;
 }
 
+.route-slots-panel {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.route-slots-panel small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.route-delivery-slots {
+  display: grid;
+  gap: 8px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.route-slot {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfc;
+  padding: 8px;
+}
+
+.route-slot.filled {
+  border-color: #b8d4c8;
+  background: #eef7f2;
+}
+
+.route-slot > strong {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--red);
+  color: #111;
+  border: 2px solid #111;
+  font-weight: 900;
+}
+
+.route-slot div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.route-slot select {
+  width: 100%;
+}
+
+.route-slot span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-file-button {
+  min-height: 40px;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+}
+
 .route-stop-tools {
   display: grid;
   grid-template-columns: minmax(120px, 1fr) auto;
@@ -947,6 +1021,14 @@ th {
 
   .route-stop-tools {
     grid-template-columns: 1fr;
+  }
+
+  .route-slot {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .route-slot .compact-file-button {
+    grid-column: 1 / -1;
   }
 
   .route-capture-grid {

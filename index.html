@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "37";
+        const currentVersion = "38";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v37")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v38")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=37">
+    <link rel="stylesheet" href="styles.css?v=38">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -144,6 +144,13 @@
             <div class="route-actions">
               <span id="routeDayStatus">No route stops yet</span>
             </div>
+            <section class="route-slots-panel">
+              <div class="signature-heading">
+                <span>Delivery Order</span>
+                <small>25 invoice spots, loaded in the order you will deliver them.</small>
+              </div>
+              <div class="route-delivery-slots" id="routeDeliverySlots"></div>
+            </section>
             <label>
               Day notes
               <textarea id="routeDayNotes" rows="4" placeholder="Van #, odometer, expenses, weather, customer issues, anything else from the day"></textarea>
@@ -652,7 +659,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=37"></script>
+    <script src="app.js?v=38"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
