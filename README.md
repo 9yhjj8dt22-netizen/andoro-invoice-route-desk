@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v43 route summary recalculates invoice totals from line items.
+Current live app version: v44 delivered checkbox controls route summary totals.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

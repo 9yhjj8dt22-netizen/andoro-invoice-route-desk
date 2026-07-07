@@ -748,7 +748,7 @@ th {
 
 .route-slot {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto auto;
+  grid-template-columns: 42px minmax(0, 1fr) auto auto auto;
   gap: 10px;
   align-items: center;
   border: 1px solid var(--line);
@@ -813,9 +813,14 @@ th {
   white-space: nowrap;
 }
 
+.route-delivered-toggle {
+  min-height: 40px;
+  white-space: nowrap;
+}
+
 .route-stop-tools {
   display: grid;
-  grid-template-columns: minmax(120px, 1fr) auto;
+  grid-template-columns: minmax(120px, 1fr) auto auto;
   gap: 10px;
   align-items: end;
 }
@@ -1043,6 +1048,7 @@ th {
   }
 
   .route-slot .compact-file-button,
+  .route-slot .route-delivered-toggle,
   .route-slot .compact-slot-button {
     grid-column: 1 / -1;
   }

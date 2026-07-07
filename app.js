@@ -764,6 +764,10 @@ function scanLisaHandled(scan = {}) {
   return Boolean(invoiceStore({ customer: scan.customer })?.orderBlocked);
 }
 
+function scanDelivered(scan = {}) {
+  return scan.delivered !== false;
+}
+
 function applyStoreToScan(scan, store) {
   if (!scan || !store) return;
   scan.matchedStoreId = store.id;
@@ -1198,6 +1202,7 @@ function renderScans() {
 
   state.scans.forEach((scan) => {
     const lisaHandled = scanLisaHandled(scan);
+    const delivered = scanDelivered(scan);
     const matchedStore = scan.matchedStoreId
       ? (state.stores || []).find((store) => store.id === scan.matchedStoreId)
       : invoiceStore(scan);
@@ -1219,6 +1224,7 @@ function renderScans() {
       <div class="route-stop-tools">
         <label>Route order<input data-scan-field="routeOrder" data-scan-id="${scan.id}" inputmode="numeric" type="number" min="1" step="1" value="${escapeAttribute(scan.routeOrder || "")}"></label>
         <label class="checkbox-label"><input data-scan-lisa="${scan.id}" type="checkbox" ${lisaHandled ? "checked" : ""}> Lisa handles</label>
+        <label class="checkbox-label"><input data-scan-delivered="${scan.id}" type="checkbox" ${delivered ? "checked" : ""}> Delivered</label>
       </div>
       <label>Stop notes<textarea data-scan-field="routeNote" data-scan-id="${scan.id}" placeholder="Notes for this stop">${escapeHtml(scan.routeNote || "")}</textarea></label>
       <div class="field-row">
@@ -1297,7 +1303,7 @@ function renderRouteDeliverySlots() {
     const selectedStoreId = slotRecord.storeId || scan?.matchedStoreId || "";
     const selectedStore = (state.stores || []).find((store) => store.id === selectedStoreId);
     const scanStatus = scan
-      ? [scanLabel(scan), scan.number ? "read" : "needs invoice #", scanLisaHandled(scan) ? "Lisa handles" : "Salesman order"].filter(Boolean).join(" - ")
+      ? [scanLabel(scan), scan.number ? "read" : "needs invoice #", scanLisaHandled(scan) ? "Lisa handles" : "Salesman order", scanDelivered(scan) ? "Delivered" : "Not delivered"].filter(Boolean).join(" - ")
       : "Select the store, then attach this stop's invoice.";
     const row = document.createElement("article");
     row.className = `route-slot${scan ? " filled" : ""}${selectedStore ? " store-selected" : ""}`;
@@ -1314,6 +1320,7 @@ function renderRouteDeliverySlots() {
         Attach invoice
         <input data-route-slot-file="${slot}" accept="image/*,application/pdf" type="file">
       </label>
+      ${scan ? `<label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${scan.id}" type="checkbox" ${scanDelivered(scan) ? "checked" : ""}> Delivered</label>` : ""}
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
     `;
     els.routeDeliverySlots.append(row);
@@ -1335,8 +1342,9 @@ function renderRouteDayStatus() {
   const orderedCount = routeScans().length;
   const prospectCount = state.routeDay?.prospects?.length || 0;
   const lisaCount = routeScans().filter((scan) => scanLisaHandled(scan)).length;
+  const deliveredCount = routeScans().filter((scan) => scanDelivered(scan)).length;
   els.routeDayStatus.textContent = orderedCount
-    ? `${orderedCount} route stop${orderedCount === 1 ? "" : "s"} loaded, ${lisaCount} Lisa handled, ${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`
+    ? `${orderedCount} route stop${orderedCount === 1 ? "" : "s"} loaded, ${deliveredCount} delivered, ${lisaCount} Lisa handled, ${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`
     : `${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`;
   if (!stops.length) {
     els.routeDayMapsLink.classList.add("disabled");
@@ -1427,6 +1435,7 @@ function parseInvoiceText(rawText, fileName) {
     matchedStoreId: matchedStore?.id || imported.matchedStoreId || "",
     importWarning: !matchedStore ? "Needs store match" : !invoiceNumber ? "Needs invoice number" : "",
     lisaHandled: Boolean(matchedStore?.orderBlocked),
+    delivered: true,
     customerEmail: imported.customerEmail || "",
     address: imported.address || "",
     number: invoiceNumber,
@@ -1628,7 +1637,7 @@ function googleMapsUrl(stops) {
 function routeInvoices() {
   const scans = routeScans();
   const routeScanByInvoiceId = new Map(scans
-    .filter((scan) => scan.savedInvoiceId)
+    .filter((scan) => scan.savedInvoiceId && scanDelivered(scan))
     .map((scan) => [scan.savedInvoiceId, scan]));
   return state.invoices
     .filter((invoice) => routeScanByInvoiceId.has(invoice.id) && invoiceDate(invoice) === routeDate())
@@ -1640,7 +1649,7 @@ function routeInvoices() {
 }
 
 function routeInvoiceForScan(scan = {}) {
-  if (!scan.savedInvoiceId) return null;
+  if (!scan.savedInvoiceId || !scanDelivered(scan)) return null;
   return state.invoices.find((invoice) => invoice.id === scan.savedInvoiceId && invoiceDate(invoice) === routeDate()) || null;
 }
 
@@ -1680,6 +1689,7 @@ function routeSummaryHtml() {
           <span>${escapeHtml(scan.address || "")}</span>
         </td>
         <td>${scanLisaHandled(scan) ? "Lisa" : "Salesman"}</td>
+        <td>${scanDelivered(scan) ? "Yes" : "No"}</td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
         <td>${escapeHtml(scan.routeNote || "")}</td>
       </tr>`;
@@ -1732,8 +1742,8 @@ function routeSummaryHtml() {
     <section class="notes">${escapeHtml(state.routeDay?.notes || "No general day notes.").replace(/\n/g, "<br>")}</section>
     <h2>Stops And Notes</h2>
     <table>
-      <thead><tr><th>Order</th><th>Store</th><th>Handled By</th><th>Invoice Total</th><th>Notes</th></tr></thead>
-      <tbody>${stopRows || `<tr><td colspan="5">No route stops loaded.</td></tr>`}</tbody>
+      <thead><tr><th>Order</th><th>Store</th><th>Handled By</th><th>Delivered</th><th>Invoice Total Counted</th><th>Notes</th></tr></thead>
+      <tbody>${stopRows || `<tr><td colspan="6">No route stops loaded.</td></tr>`}</tbody>
     </table>
     <h2>New Account Stops</h2>
     <table>
@@ -2579,6 +2589,17 @@ function attachEvents() {
       saveState();
       renderScans();
       renderStoreOrderNotice();
+      return;
+    }
+
+    const deliveredId = event.target.dataset.scanDelivered;
+    if (deliveredId) {
+      const scan = state.scans.find((item) => item.id === deliveredId);
+      if (!scan) return;
+      scan.delivered = event.target.checked;
+      saveState();
+      renderScans();
+      renderRouteDayStatus();
       return;
     }
 
