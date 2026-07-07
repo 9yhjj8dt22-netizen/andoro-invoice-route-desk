@@ -515,18 +515,10 @@ function lineItemTotal(items = []) {
 }
 
 function invoiceTotal(invoice) {
-  if (invoice.totalOverride) {
-    const explicitTotal = Number(invoice.total || invoice.amount || invoice.balanceDue || 0);
-    return Number.isFinite(explicitTotal) ? explicitTotal : 0;
-  }
+  const explicitTotal = Number(invoice.total || invoice.amount || invoice.balanceDue || 0);
+  if (Number.isFinite(explicitTotal) && explicitTotal > 0) return explicitTotal;
   const itemTotal = lineItemTotal(invoice.items || []);
-  const candidates = [
-    Number(invoice.total || 0),
-    Number(invoice.amount || 0),
-    Number(invoice.balanceDue || 0),
-    itemTotal
-  ].filter((value) => Number.isFinite(value) && value > 0);
-  return candidates.length ? Math.max(...candidates) : 0;
+  return Number.isFinite(itemTotal) && itemTotal > 0 ? itemTotal : 0;
 }
 
 function routeDate() {
@@ -3489,12 +3481,8 @@ function saveScansAsInvoices(scans = []) {
     }
     const scanItems = scan.items || lineItemsFromText(scan.itemsText);
     const scanItemTotal = lineItemTotal(scanItems);
-    const scanTotal = Math.max(
-      Number(scan.total || 0),
-      Number(scan.balanceDue || 0),
-      Number(scan.amount || 0),
-      scanItemTotal
-    );
+    const explicitScanTotal = Number(scan.total || scan.balanceDue || scan.amount || 0);
+    const scanTotal = explicitScanTotal > 0 ? explicitScanTotal : scanItemTotal;
     const invoice = canonicalizeImportedInvoice({
       id: crypto.randomUUID(),
       customer: scan.customer || "Unknown customer",
