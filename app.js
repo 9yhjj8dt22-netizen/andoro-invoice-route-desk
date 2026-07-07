@@ -1632,21 +1632,37 @@ function googleMapsUrl(stops) {
 
 function routeInvoices() {
   const scans = routeScans();
-  const routeScanByInvoiceId = new Map(scans
-    .filter((scan) => scan.savedInvoiceId && scanDelivered(scan))
-    .map((scan) => [scan.savedInvoiceId, scan]));
-  return state.invoices
-    .filter((invoice) => routeScanByInvoiceId.has(invoice.id) && invoiceDate(invoice) === routeDate())
-    .sort((a, b) => {
-      const scanA = routeScanByInvoiceId.get(a.id);
-      const scanB = routeScanByInvoiceId.get(b.id);
-      return Number(scanA?.routeOrder || 9999) - Number(scanB?.routeOrder || 9999);
-    });
+  const invoices = scans
+    .filter(scanDelivered)
+    .map((scan) => routeInvoiceForScan(scan))
+    .filter(Boolean);
+  const seen = new Set();
+  return invoices.filter((invoice) => {
+    if (seen.has(invoice.id)) return false;
+    seen.add(invoice.id);
+    return true;
+  });
 }
 
 function routeInvoiceForScan(scan = {}) {
-  if (!scan.savedInvoiceId || !scanDelivered(scan)) return null;
-  return state.invoices.find((invoice) => invoice.id === scan.savedInvoiceId && invoiceDate(invoice) === routeDate()) || null;
+  if (!scanDelivered(scan)) return null;
+  return matchingInvoiceForRouteScan(scan) || null;
+}
+
+function matchingInvoiceForRouteScan(scan = {}) {
+  const date = routeDate();
+  const sameNumber = (invoice) => String(invoice.number || "").trim() && String(invoice.number || "").trim() === String(scan.number || "").trim();
+  const sameDate = (invoice) => invoiceDate(invoice) === date;
+  const sameStore = (invoice) => {
+    const invoiceName = normalizedName(invoice.customer || "");
+    const scanName = normalizedName(scan.customer || "");
+    return !scanName || !invoiceName || invoiceName === scanName || invoiceName.includes(scanName) || scanName.includes(invoiceName);
+  };
+  const matches = (state.invoices || []).filter((invoice) => sameNumber(invoice) && sameDate(invoice) && sameStore(invoice));
+  if (matches.length) {
+    return matches.sort((a, b) => Number(Boolean(b.totalOverride)) - Number(Boolean(a.totalOverride)))[0];
+  }
+  return (state.invoices || []).find((invoice) => invoice.id === scan.savedInvoiceId && sameDate(invoice)) || null;
 }
 
 function routeDayTotal() {
@@ -2289,18 +2305,28 @@ function saveInvoice({ keepForm = false } = {}) {
 }
 
 function syncRouteScanFromInvoice(invoice) {
-  const scan = (state.scans || []).find((item) => item.savedInvoiceId === invoice.id);
-  if (!scan) return;
-  scan.customer = invoice.customer || scan.customer;
-  scan.address = invoice.address || scan.address;
-  scan.number = invoice.number || scan.number;
-  scan.invoiceDate = invoiceDate(invoice);
-  scan.items = invoice.items || scan.items || [];
-  scan.itemsText = lineItemsToText(scan.items);
-  scan.total = Number(invoice.total || 0);
-  scan.amount = Number(invoice.amount || invoice.total || 0);
-  scan.balanceDue = Number(invoice.balanceDue || invoice.amount || invoice.total || 0);
-  scan.paymentsCredits = Number(invoice.paymentsCredits || 0);
+  const invoiceNumber = String(invoice.number || "").trim();
+  const invoiceName = normalizedName(invoice.customer || "");
+  const scans = (state.scans || []).filter((item) => {
+    if (item.savedInvoiceId === invoice.id) return true;
+    if (!invoiceNumber || String(item.number || "").trim() !== invoiceNumber) return false;
+    if (invoiceDate(invoice) !== (item.invoiceDate || routeDate())) return false;
+    const scanName = normalizedName(item.customer || "");
+    return !scanName || !invoiceName || invoiceName === scanName || invoiceName.includes(scanName) || scanName.includes(invoiceName);
+  });
+  scans.forEach((scan) => {
+    scan.savedInvoiceId = invoice.id;
+    scan.customer = invoice.customer || scan.customer;
+    scan.address = invoice.address || scan.address;
+    scan.number = invoice.number || scan.number;
+    scan.invoiceDate = invoiceDate(invoice);
+    scan.items = invoice.items || scan.items || [];
+    scan.itemsText = lineItemsToText(scan.items);
+    scan.total = Number(invoice.total || 0);
+    scan.amount = Number(invoice.amount || invoice.total || 0);
+    scan.balanceDue = Number(invoice.balanceDue || invoice.amount || invoice.total || 0);
+    scan.paymentsCredits = Number(invoice.paymentsCredits || 0);
+  });
 }
 
 function upsertStoreFromInvoice(invoice) {

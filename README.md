@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v46 route summaries trust saved invoice totals first.
+Current live app version: v47 route summaries prefer corrected matching invoices.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
