@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v40 persistent local store edits and deletions.
+Current live app version: v41 route-summary totals use current route invoices only.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

@@ -1616,8 +1616,22 @@ function googleMapsUrl(stops) {
 }
 
 function routeInvoices() {
-  const date = routeDate();
-  return state.invoices.filter((invoice) => invoiceDate(invoice) === date);
+  const scans = routeScans();
+  const routeScanByInvoiceId = new Map(scans
+    .filter((scan) => scan.savedInvoiceId)
+    .map((scan) => [scan.savedInvoiceId, scan]));
+  return state.invoices
+    .filter((invoice) => routeScanByInvoiceId.has(invoice.id) && invoiceDate(invoice) === routeDate())
+    .sort((a, b) => {
+      const scanA = routeScanByInvoiceId.get(a.id);
+      const scanB = routeScanByInvoiceId.get(b.id);
+      return Number(scanA?.routeOrder || 9999) - Number(scanB?.routeOrder || 9999);
+    });
+}
+
+function routeInvoiceForScan(scan = {}) {
+  if (!scan.savedInvoiceId) return null;
+  return state.invoices.find((invoice) => invoice.id === scan.savedInvoiceId && invoiceDate(invoice) === routeDate()) || null;
 }
 
 function routeSalesByStore() {
@@ -1658,7 +1672,8 @@ function routeSummaryHtml() {
     </tr>`).join("");
   const stopRows = stops.map((scan, index) => {
     const storeName = scan.customer || `Stop ${index + 1}`;
-    const salesTotal = salesByStore.get(normalizedName(storeName))?.total || 0;
+    const invoice = routeInvoiceForScan(scan);
+    const salesTotal = invoice ? invoiceTotal(invoice) : 0;
     return `
       <tr>
         <td>${escapeHtml(scan.routeOrder || index + 1)}</td>
@@ -2617,6 +2632,16 @@ function editInvoiceById(id) {
 function deleteInvoiceById(id) {
   if (!confirm("Delete this invoice?")) return;
   state.invoices = state.invoices.filter((invoice) => invoice.id !== id);
+  (state.scans || []).forEach((scan) => {
+    if (scan.savedInvoiceId === id) {
+      scan.savedInvoiceId = "";
+      scan.accepted = false;
+    }
+  });
+  routeDeliverySlots().forEach((slot) => {
+    const scan = (state.scans || []).find((item) => item.id === slot.scanId);
+    if (scan?.savedInvoiceId === id || (!scan && slot.scanId)) slot.scanId = "";
+  });
   saveState();
   render();
 }
