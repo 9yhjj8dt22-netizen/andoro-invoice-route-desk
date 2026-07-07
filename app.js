@@ -515,6 +515,10 @@ function lineItemTotal(items = []) {
 }
 
 function invoiceTotal(invoice) {
+  if (invoice.totalOverride) {
+    const explicitTotal = Number(invoice.total || invoice.amount || invoice.balanceDue || 0);
+    return Number.isFinite(explicitTotal) ? explicitTotal : 0;
+  }
   const itemTotal = lineItemTotal(invoice.items || []);
   const candidates = [
     Number(invoice.total || 0),
@@ -2244,7 +2248,8 @@ function validateRequiredOrderFields() {
 function invoiceFromForm() {
   const items = itemsWithDelivery(lineItemsFromText(els.lineItemsText.value));
   const computedTotal = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
-  const total = computedTotal || Number(els.invoiceTotal.value || els.invoiceAmount.value);
+  const enteredTotal = Number(els.invoiceTotal.value || els.invoiceAmount.value || 0);
+  const total = enteredTotal || computedTotal;
   const balanceDue = Number(els.balanceDue.value || total);
   return {
     id: els.invoiceId.value || crypto.randomUUID(),
@@ -2267,6 +2272,7 @@ function invoiceFromForm() {
     deliveryFee: Number(els.deliveryFee.value || 0),
     customerTotalBalance: Number(els.customerTotalBalance.value || 0),
     total,
+    totalOverride: true,
     paymentsCredits: Number(els.paymentsCredits.value || 0),
     balanceDue,
     customerSignature: getSignatureData()
@@ -2282,11 +2288,27 @@ function saveInvoice({ keepForm = false } = {}) {
   const index = state.invoices.findIndex((item) => item.id === invoice.id);
   if (index >= 0) state.invoices[index] = invoice;
   else state.invoices.unshift(invoice);
+  syncRouteScanFromInvoice(invoice);
   upsertStoreFromInvoice(invoice);
   saveState();
   if (!keepForm) resetInvoiceForm();
   render();
   return invoice;
+}
+
+function syncRouteScanFromInvoice(invoice) {
+  const scan = (state.scans || []).find((item) => item.savedInvoiceId === invoice.id);
+  if (!scan) return;
+  scan.customer = invoice.customer || scan.customer;
+  scan.address = invoice.address || scan.address;
+  scan.number = invoice.number || scan.number;
+  scan.invoiceDate = invoiceDate(invoice);
+  scan.items = invoice.items || scan.items || [];
+  scan.itemsText = lineItemsToText(scan.items);
+  scan.total = Number(invoice.total || 0);
+  scan.amount = Number(invoice.amount || invoice.total || 0);
+  scan.balanceDue = Number(invoice.balanceDue || invoice.amount || invoice.total || 0);
+  scan.paymentsCredits = Number(invoice.paymentsCredits || 0);
 }
 
 function upsertStoreFromInvoice(invoice) {
