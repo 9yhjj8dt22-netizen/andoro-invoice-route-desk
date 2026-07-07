@@ -510,9 +510,19 @@ function invoiceBalance(invoice) {
   return Number.isFinite(balance) ? balance : 0;
 }
 
+function lineItemTotal(items = []) {
+  return (items || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+}
+
 function invoiceTotal(invoice) {
-  const total = Number(invoice.total ?? invoice.amount ?? invoice.balanceDue ?? 0);
-  return Number.isFinite(total) ? total : 0;
+  const itemTotal = lineItemTotal(invoice.items || []);
+  const candidates = [
+    Number(invoice.total || 0),
+    Number(invoice.amount || 0),
+    Number(invoice.balanceDue || 0),
+    itemTotal
+  ].filter((value) => Number.isFinite(value) && value > 0);
+  return candidates.length ? Math.max(...candidates) : 0;
 }
 
 function routeDate() {
@@ -3435,6 +3445,13 @@ function saveScansAsInvoices(scans = []) {
       return;
     }
     const scanItems = scan.items || lineItemsFromText(scan.itemsText);
+    const scanItemTotal = lineItemTotal(scanItems);
+    const scanTotal = Math.max(
+      Number(scan.total || 0),
+      Number(scan.balanceDue || 0),
+      Number(scan.amount || 0),
+      scanItemTotal
+    );
     const invoice = canonicalizeImportedInvoice({
       id: crypto.randomUUID(),
       customer: scan.customer || "Unknown customer",
@@ -3442,7 +3459,7 @@ function saveScansAsInvoices(scans = []) {
       customerEmail: scan.customerEmail || "",
       address: scan.address || "",
       number: scan.number || `SCAN-${Date.now()}`,
-      amount: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
+      amount: scanTotal,
       invoiceDate: scan.invoiceDate || todayOffset(0),
       terms: scan.terms || "",
       poNumber: scan.poNumber || "",
@@ -3456,9 +3473,9 @@ function saveScansAsInvoices(scans = []) {
       items: scanItems,
       deliveryFee: deliveryFeeFromItems(scanItems, 0),
       customerTotalBalance: Number(scan.customerTotalBalance || 0),
-      total: Number(scan.total || 0),
+      total: scanTotal,
       paymentsCredits: Number(scan.paymentsCredits || 0),
-      balanceDue: Number(scan.balanceDue ?? scan.total ?? scan.amount ?? 0),
+      balanceDue: Math.max(scanTotal - Number(scan.paymentsCredits || 0), 0),
       sourceFile: scan.fileName || "",
       lisaHandled: scanLisaHandled(scan)
     });
