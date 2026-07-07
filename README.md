@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v41 route-summary totals use current route invoices only.
+Current live app version: v42 route summary uses invoice-total wording.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

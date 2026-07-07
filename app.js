@@ -1634,23 +1634,11 @@ function routeInvoiceForScan(scan = {}) {
   return state.invoices.find((invoice) => invoice.id === scan.savedInvoiceId && invoiceDate(invoice) === routeDate()) || null;
 }
 
-function routeSalesByStore() {
-  return routeInvoices().reduce((map, invoice) => {
-    const label = invoice.customer || "Unknown store";
-    const key = normalizedName(label) || label;
-    const current = map.get(key) || { label, total: 0 };
-    current.total += invoiceTotal(invoice);
-    map.set(key, current);
-    return map;
-  }, new Map());
-}
-
 function routeDayTotal() {
-  return [...routeSalesByStore().values()].reduce((sum, entry) => sum + entry.total, 0);
+  return routeInvoices().reduce((sum, invoice) => sum + invoiceTotal(invoice), 0);
 }
 
 function routeSummaryHtml() {
-  const salesByStore = routeSalesByStore();
   const stops = routeScans();
   const receipts = state.routeDay?.receipts || [];
   const prospects = state.routeDay?.prospects || [];
@@ -1673,7 +1661,7 @@ function routeSummaryHtml() {
   const stopRows = stops.map((scan, index) => {
     const storeName = scan.customer || `Stop ${index + 1}`;
     const invoice = routeInvoiceForScan(scan);
-    const salesTotal = invoice ? invoiceTotal(invoice) : 0;
+    const stopInvoiceTotal = invoice ? invoiceTotal(invoice) : 0;
     return `
       <tr>
         <td>${escapeHtml(scan.routeOrder || index + 1)}</td>
@@ -1682,7 +1670,7 @@ function routeSummaryHtml() {
           <span>${escapeHtml(scan.address || "")}</span>
         </td>
         <td>${scanLisaHandled(scan) ? "Lisa" : "Salesman"}</td>
-        <td class="money">${money.format(salesTotal)}</td>
+        <td class="money">${money.format(stopInvoiceTotal)}</td>
         <td>${escapeHtml(scan.routeNote || "")}</td>
       </tr>`;
   }).join("");
@@ -1729,12 +1717,12 @@ function routeSummaryHtml() {
         <div>Starting invoice #: ${escapeHtml(state.routeDay?.startingInvoiceNumber || "")}</div>
       </div>
     </header>
-    <section class="total"><span>Day Total</span><span>${money.format(routeDayTotal())}</span></section>
+    <section class="total"><span>Day Invoice Total</span><span>${money.format(routeDayTotal())}</span></section>
     <h2>Day Notes</h2>
     <section class="notes">${escapeHtml(state.routeDay?.notes || "No general day notes.").replace(/\n/g, "<br>")}</section>
     <h2>Stops And Notes</h2>
     <table>
-      <thead><tr><th>Order</th><th>Store</th><th>Handled By</th><th>Sales</th><th>Notes</th></tr></thead>
+      <thead><tr><th>Order</th><th>Store</th><th>Handled By</th><th>Invoice Total</th><th>Notes</th></tr></thead>
       <tbody>${stopRows || `<tr><td colspan="5">No route stops loaded.</td></tr>`}</tbody>
     </table>
     <h2>New Account Stops</h2>
@@ -1747,10 +1735,10 @@ function routeSummaryHtml() {
       <thead><tr><th>#</th><th>Receipt</th><th>Date Added</th></tr></thead>
       <tbody>${receiptRows || `<tr><td colspan="3">No receipts captured.</td></tr>`}</tbody>
     </table>
-    <h2>Invoices Sold Today</h2>
+    <h2>Today's Route Invoices</h2>
     <table>
-      <thead><tr><th>Store</th><th>Invoice #</th><th>Sales</th></tr></thead>
-      <tbody>${invoiceRows || `<tr><td colspan="3">No saved sales for this date.</td></tr>`}</tbody>
+      <thead><tr><th>Store</th><th>Invoice #</th><th>Invoice Total</th></tr></thead>
+      <tbody>${invoiceRows || `<tr><td colspan="3">No route invoices saved for this date.</td></tr>`}</tbody>
     </table>
   </main>
 </body>
