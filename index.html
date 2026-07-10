@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "48";
+        const currentVersion = "49";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v48")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v49")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=48">
+    <link rel="stylesheet" href="styles.css?v=49">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -140,6 +140,10 @@
                 Starting invoice #
                 <input id="routeStartInvoice" inputmode="numeric" placeholder="Provided by Lisa">
               </label>
+              <label>
+                Route start time
+                <input id="routeStartTime" type="time">
+              </label>
             </div>
             <div class="route-actions">
               <span id="routeDayStatus">No route stops yet</span>
@@ -147,7 +151,7 @@
             <section class="route-slots-panel">
               <div class="signature-heading">
                 <span>Delivery Order</span>
-                <small>25 invoice spots, loaded in the order you will deliver them.</small>
+                <small>25 delivery spots. Pick the stores, then build the most efficient route from Produce Row.</small>
                 <button class="primary-button" id="buildRoute" type="button">Build Route</button>
               </div>
               <div class="route-delivery-slots" id="routeDeliverySlots"></div>
@@ -660,7 +664,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=48"></script>
+    <script src="app.js?v=49"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");

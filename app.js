@@ -80,6 +80,11 @@ const PIZZAS_PER_CASE = 12;
 const CASES_PER_SHELF = 2;
 const DEFAULT_DELIVERY_FEE = 10;
 const DEFAULT_REP = "J.Ballew";
+const FIXED_ROUTE_ORIGIN = {
+  address: "92 Produce Row, St. Louis, MO 63102",
+  lat: 38.6508865,
+  lng: -90.187931
+};
 
 const sampleData = {
   invoices: [],
@@ -90,12 +95,13 @@ const sampleData = {
     date: "",
     rep: DEFAULT_REP,
     startingInvoiceNumber: "",
+    startTime: "",
     notes: "",
     deliverySlots: [],
     receipts: [],
     prospects: []
   },
-  origin: { lat: 41.8781, lng: -87.6298 },
+  origin: { lat: FIXED_ROUTE_ORIGIN.lat, lng: FIXED_ROUTE_ORIGIN.lng, address: FIXED_ROUTE_ORIGIN.address },
   scans: [],
   stores: [
     {
@@ -346,6 +352,7 @@ const els = {
   routeDayDate: document.querySelector("#routeDayDate"),
   routeDayRep: document.querySelector("#routeDayRep"),
   routeStartInvoice: document.querySelector("#routeStartInvoice"),
+  routeStartTime: document.querySelector("#routeStartTime"),
   routeDayNotes: document.querySelector("#routeDayNotes"),
   routeDeliverySlots: document.querySelector("#routeDeliverySlots"),
   routeReceiptFiles: document.querySelector("#routeReceiptFiles"),
@@ -433,6 +440,7 @@ function normalizeState(nextState) {
   if (!nextState.routeDay.date) nextState.routeDay.date = todayOffset(0);
   if (!nextState.routeDay.rep) nextState.routeDay.rep = DEFAULT_REP;
   nextState.routeDay.deliverySlots = normalizeRouteDeliverySlots(nextState.routeDay.deliverySlots || []);
+  nextState.origin = fixedRouteOrigin();
   nextState.invoices = (nextState.invoices || []).filter((invoice) => !isDemoInvoice(invoice));
   nextState.stops = (nextState.stops || []).filter((stop) => !["North Lake Supply", "Riverbend Builders"].includes(stop.name));
   nextState.deletedStoreIds = Array.isArray(nextState.deletedStoreIds) ? nextState.deletedStoreIds : [];
@@ -560,6 +568,7 @@ function render() {
   els.routeDayDate.value = routeDate();
   els.routeDayRep.value = routeRep();
   els.routeStartInvoice.value = state.routeDay?.startingInvoiceNumber || "";
+  els.routeStartTime.value = state.routeDay?.startTime || "";
   els.routeDayNotes.value = state.routeDay?.notes || "";
 
   renderAttention();
@@ -1594,40 +1603,135 @@ function optimizeStops() {
     alert(`Find coordinates for ${missingCoordinates.length} stop${missingCoordinates.length === 1 ? "" : "s"} before optimizing.`);
     return;
   }
-  const origin = {
-    lat: Number(els.originLat.value || state.origin?.lat),
-    lng: Number(els.originLng.value || state.origin?.lng)
-  };
+  const origin = fixedRouteOrigin();
   if (!Number.isFinite(origin.lat) || !Number.isFinite(origin.lng)) {
-    alert("Add a starting latitude and longitude first.");
+    alert("The starting address could not be read.");
     return;
   }
   state.origin = origin;
-  const unvisited = [...state.stops];
-  const route = [];
-  let current = origin;
-  while (unvisited.length) {
-    unvisited.sort((a, b) => {
-      const priorityA = a.priority === "high" ? -15 : a.priority === "low" ? 15 : 0;
-      const priorityB = b.priority === "high" ? -15 : b.priority === "low" ? 15 : 0;
-      return haversineMiles(current, a) + priorityA - (haversineMiles(current, b) + priorityB);
-    });
-    const next = unvisited.shift();
-    route.push(next);
-    current = next;
-  }
+  const route = optimizedStopOrder(state.stops, origin);
   state.optimizedStopIds = route.map((stop) => stop.id);
   saveState();
   render();
 }
 
-function routeMiles(stops) {
-  let current = state.origin;
+function fixedRouteOrigin() {
+  return { ...FIXED_ROUTE_ORIGIN };
+}
+
+function optimizedStopOrder(stops = [], origin = fixedRouteOrigin()) {
+  const unvisited = stops.filter((stop) => Number.isFinite(Number(stop.lat)) && Number.isFinite(Number(stop.lng)));
+  const route = [];
+  let current = origin;
+  let currentMinutes = routeStartMinutes();
+  while (unvisited.length) {
+    unvisited.sort((a, b) => {
+      return routeChoiceScore(current, currentMinutes, a) - routeChoiceScore(current, currentMinutes, b);
+    });
+    const next = unvisited.shift();
+    route.push(next);
+    currentMinutes += travelMinutes(current, next) + serviceMinutesForStop(next);
+    current = next;
+  }
+  return improveRouteWithTwoOpt(route, origin, routeStartMinutes());
+}
+
+function routeChoiceScore(current, currentMinutes, stop) {
+  const miles = haversineMiles(current, stop);
+  const arrival = currentMinutes + travelMinutes(current, stop);
+  const deliveryMinutes = deliveryTimeMinutes(stop);
+  if (deliveryMinutes === null) return miles;
+  const early = Math.max(0, deliveryMinutes - arrival);
+  const late = Math.max(0, arrival - deliveryMinutes);
+  return miles + (early > 25 ? early * 0.22 : 0) + late * 1.8;
+}
+
+function improveRouteWithTwoOpt(route = [], origin = fixedRouteOrigin(), startMinutes = routeStartMinutes()) {
+  const best = [...route];
+  let improved = true;
+  let passes = 0;
+  while (improved && passes < 8) {
+    improved = false;
+    passes += 1;
+    for (let i = 0; i < best.length - 2; i += 1) {
+      for (let k = i + 2; k < best.length; k += 1) {
+        const candidate = [
+          ...best.slice(0, i + 1),
+          ...best.slice(i + 1, k + 1).reverse(),
+          ...best.slice(k + 1)
+        ];
+        if (routeScore(candidate, origin, startMinutes) + 0.01 < routeScore(best, origin, startMinutes)) {
+          best.splice(0, best.length, ...candidate);
+          improved = true;
+        }
+      }
+    }
+  }
+  return best;
+}
+
+function routeScore(stops = [], origin = fixedRouteOrigin(), startMinutes = routeStartMinutes()) {
+  let current = origin;
+  let minutes = startMinutes;
+  return stops.reduce((score, stop) => {
+    const miles = haversineMiles(current, stop);
+    minutes += travelMinutes(current, stop);
+    const deliveryMinutes = deliveryTimeMinutes(stop);
+    const early = deliveryMinutes === null ? 0 : Math.max(0, deliveryMinutes - minutes);
+    const late = deliveryMinutes === null ? 0 : Math.max(0, minutes - deliveryMinutes);
+    const timePenalty = (early > 25 ? early * 0.22 : 0) + late * 1.8;
+    current = stop;
+    minutes += serviceMinutesForStop(stop);
+    return score + miles + timePenalty;
+  }, 0);
+}
+
+function routeDistance(stops = [], origin = fixedRouteOrigin()) {
+  let current = origin;
   return stops.reduce((total, stop) => {
     const miles = current ? haversineMiles(current, stop) : 0;
     current = stop;
     return total + miles;
   }, 0);
+}
+
+function travelMinutes(a, b) {
+  return (haversineMiles(a, b) / 42) * 60;
+}
+
+function serviceMinutesForStop(stop = {}) {
+  return scanHasInvoice(stop.scan || {}) ? 10 : 5;
+}
+
+function routeStartMinutes() {
+  const saved = state.routeDay?.startTime || "";
+  const parsed = timeToMinutes(saved);
+  if (parsed !== null) return parsed;
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes();
+}
+
+function deliveryTimeMinutes(stop = {}) {
+  return timeToMinutes(stop.dt || stop.scan?.dt || stop.store?.dt || stop.scan?.specialInstructions || stop.store?.specialInstructions || "");
+}
+
+function timeToMinutes(value = "") {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return null;
+  const match = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\b/);
+  if (!match) return null;
+  let hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  const meridiem = match[3]?.replace(/\./g, "");
+  if (hours > 24 || minutes > 59) return null;
+  if (meridiem === "pm" && hours < 12) hours += 12;
+  if (meridiem === "am" && hours === 12) hours = 0;
+  if (!meridiem && hours <= 5) hours += 12;
+  return hours * 60 + minutes;
+}
+
+function routeMiles(stops) {
+  return routeDistance(stops, state.origin || fixedRouteOrigin());
 }
 
 function haversineMiles(a, b) {
@@ -1646,7 +1750,7 @@ function degreesToRadians(degrees) {
 
 function googleMapsUrl(stops) {
   const points = [];
-  if (state.origin) points.push(`${state.origin.lat},${state.origin.lng}`);
+  points.push(encodeURIComponent(FIXED_ROUTE_ORIGIN.address));
   points.push(...stops.map((stop) => encodeURIComponent(stop.address || `${stop.lat},${stop.lng}`)));
   return `https://www.google.com/maps/dir/${points.join("/")}`;
 }
@@ -1782,6 +1886,7 @@ function routeSummaryHtml() {
       <div class="meta">
         <div>${escapeHtml(formatDate(routeDate()))}</div>
         <div>Rep: ${escapeHtml(routeRep())}</div>
+        <div>Route start: ${escapeHtml(state.routeDay?.startTime || "Build time")}</div>
         <div>Starting invoice #: ${escapeHtml(state.routeDay?.startingInvoiceNumber || "")}</div>
       </div>
     </header>
@@ -2406,6 +2511,7 @@ function saveRouteDaySettings() {
   state.routeDay.date = els.routeDayDate.value || todayOffset(0);
   state.routeDay.rep = els.routeDayRep.value.trim() || DEFAULT_REP;
   state.routeDay.startingInvoiceNumber = els.routeStartInvoice.value.trim();
+  state.routeDay.startTime = els.routeStartTime.value;
   state.routeDay.notes = els.routeDayNotes.value;
   state.routeDay.receipts = state.routeDay.receipts || [];
   state.routeDay.prospects = state.routeDay.prospects || [];
@@ -2488,6 +2594,7 @@ function clearRouteDay() {
     date: todayOffset(0),
     rep: DEFAULT_REP,
     startingInvoiceNumber: "",
+    startTime: "",
     notes: "",
     receipts: [],
     prospects: []
@@ -2554,6 +2661,7 @@ function attachEvents() {
   els.routeDayDate.addEventListener("input", saveRouteDaySettings);
   els.routeDayRep.addEventListener("input", saveRouteDaySettings);
   els.routeStartInvoice.addEventListener("input", saveRouteDaySettings);
+  els.routeStartTime.addEventListener("input", saveRouteDaySettings);
   els.routeDayNotes.addEventListener("input", saveRouteDaySettings);
   els.routeReceiptFiles.addEventListener("change", handleReceiptSelection);
   els.routeReceiptCamera.addEventListener("change", handleReceiptSelection);
@@ -3450,6 +3558,76 @@ function placeholderScanForStore(store, slot) {
   };
 }
 
+function routeStopFromEntry(entry) {
+  const scan = entry.scan || {};
+  const store = entry.store || {};
+  return {
+    id: scan.id,
+    scan,
+    store,
+    name: scan.customer || store.name || "Route stop",
+    address: scan.address || store.address || "",
+    lat: Number(scan.lat || store.lat || 0),
+    lng: Number(scan.lng || store.lng || 0),
+    dt: scan.dt || store.dt || "",
+    priority: scanHasInvoice(scan) ? "high" : "normal"
+  };
+}
+
+async function geocodeRouteStops(stops = []) {
+  const missing = stops.filter((stop) => stop.address && (!Number(stop.lat) || !Number(stop.lng)));
+  if (!missing.length) return { updated: 0, missing: 0 };
+  let updated = 0;
+  for (const stop of missing) {
+    try {
+      const coords = await geocodeAddress(stop.address);
+      if (coords) {
+        stop.lat = coords.lat;
+        stop.lng = coords.lng;
+        stop.scan.lat = coords.lat;
+        stop.scan.lng = coords.lng;
+        if (stop.store?.id) {
+          stop.store.lat = coords.lat;
+          stop.store.lng = coords.lng;
+        }
+        updated += 1;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+    } catch {
+      // Keep the route usable even if one address cannot be found.
+    }
+  }
+  return { updated, missing: missing.length - updated };
+}
+
+async function geocodeAddress(address = "") {
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`);
+  const results = await response.json();
+  if (!results?.[0]) return null;
+  return {
+    lat: Number(results[0].lat),
+    lng: Number(results[0].lon)
+  };
+}
+
+function applyOptimizedRouteStops(stops = []) {
+  const slots = routeDeliverySlots();
+  slots.forEach((slot) => {
+    slot.scanId = "";
+    slot.storeId = "";
+  });
+  stops.forEach((stop, index) => {
+    const slotNumber = index + 1;
+    stop.scan.routeOrder = slotNumber;
+    stop.scan.deliverySlot = slotNumber;
+    const slot = slots[index];
+    if (slot) {
+      slot.scanId = stop.scan.id;
+      slot.storeId = stop.store?.id || stop.scan.matchedStoreId || "";
+    }
+  });
+}
+
 async function processRouteSlotFile(file, slot) {
   if (!file) return;
   const slotRecord = routeDeliverySlot(slot);
@@ -3615,7 +3793,10 @@ function saveScansAsInvoices(scans = []) {
   return { saved: invoices.length, lisaCount, skipped };
 }
 
-function buildRouteFromDeliverySlots() {
+async function buildRouteFromDeliverySlots() {
+  els.buildRoute.disabled = true;
+  const originalLabel = els.buildRoute.textContent;
+  els.buildRoute.textContent = "Building...";
   const slots = routeDeliverySlots();
   const filledSlots = slots
     .map((slot) => ({
@@ -3626,11 +3807,15 @@ function buildRouteFromDeliverySlots() {
     .filter((entry) => entry.store || entry.scan);
   if (!filledSlots.length) {
     alert("Add at least one store to the delivery spots before building the route.");
+    els.buildRoute.disabled = false;
+    els.buildRoute.textContent = originalLabel;
     return;
   }
   const missingStore = filledSlots.filter((entry) => !entry.store).length;
   if (missingStore) {
     alert(`${missingStore} delivery spot${missingStore === 1 ? "" : "s"} need a store.`);
+    els.buildRoute.disabled = false;
+    els.buildRoute.textContent = originalLabel;
     return;
   }
   let missingInvoice = 0;
@@ -3647,14 +3832,47 @@ function buildRouteFromDeliverySlots() {
     assignScanToRouteSlot(entry.scan, entry.slot.slot);
     entry.scan.accepted = true;
   });
+  els.routeDayStatus.textContent = "Finding stop locations and building the most efficient route...";
+  const routeStops = filledSlots.map(routeStopFromEntry);
+  const geocodeResult = await geocodeRouteStops(routeStops);
+  const routableStops = routeStops.filter((stop) => Number(stop.lat) && Number(stop.lng));
+  if (!routableStops.length) {
+    els.buildRoute.disabled = false;
+    els.buildRoute.textContent = originalLabel;
+    alert("I could not find map locations for the selected stores. Check the store addresses, then build the route again.");
+    saveState();
+    render();
+    return;
+  }
+  const optimizedStops = optimizedStopOrder(routableStops, fixedRouteOrigin());
+  const unroutedStops = routeStops.filter((stop) => !optimizedStops.some((optimized) => optimized.id === stop.id));
+  applyOptimizedRouteStops([...optimizedStops, ...unroutedStops]);
+  state.origin = fixedRouteOrigin();
+  state.stops = optimizedStops.map((stop) => ({
+    id: stop.id,
+    name: stop.name,
+    address: stop.address,
+    lat: stop.lat,
+    lng: stop.lng,
+    dt: stop.dt || "",
+    priority: stop.priority
+  }));
+  state.optimizedStopIds = state.stops.map((stop) => stop.id);
   const invoiceScans = filledSlots.map((entry) => entry.scan).filter((scan) => scanHasInvoice(scan) && scanReadyToSave(scan));
   const reviewCount = filledSlots.map((entry) => entry.scan).filter((scan) => scanHasInvoice(scan) && !scanReadyToSave(scan)).length;
   const result = invoiceScans.length ? saveScansAsInvoices(invoiceScans) : { saved: 0, lisaCount: 0, skipped: 0 };
-  if (!result) return;
+  if (!result) {
+    els.buildRoute.disabled = false;
+    els.buildRoute.textContent = originalLabel;
+    return;
+  }
   saveState();
   render();
   setTab("scan");
-  alert(`Route built. ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
+  els.buildRoute.disabled = false;
+  els.buildRoute.textContent = originalLabel;
+  const miles = routeDistance(optimizedStops, fixedRouteOrigin());
+  alert(`Route built in the most efficient order from 92 Produce Row. ${optimizedStops.length} stop${optimizedStops.length === 1 ? "" : "s"} routed, about ${miles.toFixed(1)} miles before traffic.${geocodeResult.missing ? ` ${geocodeResult.missing} stop${geocodeResult.missing === 1 ? "" : "s"} could not be mapped and stayed at the end.` : ""} ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
 }
 
 function saveScannedInvoices() {
