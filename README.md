@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v49 efficient route builder from Produce Row with delivery-time awareness.
+Current live app version: v50 one-page invoice printing by default.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

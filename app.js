@@ -2972,7 +2972,8 @@ function invoiceMessage(invoice) {
 function printableInvoiceHtml(invoice) {
   const plainAmount = (value) => Number(value || 0).toFixed(2);
   const itemCount = invoice.items?.length || 1;
-  const printMode = itemCount > 24 ? "ultra-compact" : itemCount > 14 ? "compact" : "";
+  const printMode = itemCount > 28 ? "micro-compact" : itemCount > 18 ? "ultra-compact" : itemCount > 10 ? "compact" : "";
+  const printScale = itemCount > 36 ? 0.76 : itemCount > 30 ? 0.82 : itemCount > 24 ? 0.88 : itemCount > 18 ? 0.93 : 1;
   const rows = (invoice.items || []).map((item) => `
     <tr>
       <td>${escapeHtml(item.description || "")}</td>
@@ -2983,7 +2984,7 @@ function printableInvoiceHtml(invoice) {
       <td>${plainAmount(item.amount || item.rate)}</td>
     </tr>
   `).join("") || `<tr><td>Order</td><td></td><td></td><td></td><td></td><td>${plainAmount(invoiceTotal(invoice))}</td></tr>`;
-  const targetRows = printMode === "ultra-compact" ? 10 : printMode ? 14 : 18;
+  const targetRows = printMode === "micro-compact" ? itemCount : printMode === "ultra-compact" ? Math.max(itemCount, 8) : printMode ? Math.max(itemCount, 12) : 18;
   const blankRows = Array.from({ length: Math.max(0, targetRows - itemCount) }, () => `
     <tr class="blank-row"><td></td><td></td><td></td><td></td><td></td><td></td></tr>
   `).join("");
@@ -2997,6 +2998,7 @@ function printableInvoiceHtml(invoice) {
     @page { size: letter; margin: 0; }
     body { margin: 0; background: #f1f1f1; color: #10251d; font-family: Arial, Helvetica, sans-serif; font-size: 12px; }
     .sheet {
+      --print-scale: ${printScale};
       width: 8.5in;
       height: 10.76in;
       overflow: hidden;
@@ -3013,6 +3015,10 @@ function printableInvoiceHtml(invoice) {
       padding: 0.18in 0.25in 0.12in;
       font-size: 9.3px;
     }
+    .sheet.micro-compact {
+      padding: 0.13in 0.18in 0.08in;
+      font-size: 8.2px;
+    }
     :root { --green: #1f6d48; --green-light: #a8d3b4; --gray-row: #e7e7e2; --red: #9b1f38; }
     .top {
       display: grid;
@@ -3023,10 +3029,12 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .top { min-height: 0.98in; gap: 10px; }
     .ultra-compact .top { min-height: 0.86in; gap: 8px; grid-template-columns: 1.28in 2.2in 2.35in; }
+    .micro-compact .top { min-height: 0.62in; gap: 6px; grid-template-columns: 1.05in 2.1in 2.2in; }
     .logo-wrap { text-align: center; }
     .logo { width: 1.02in; height: 0.78in; object-fit: contain; display: block; margin: 0 auto 1px; }
     .compact .logo { width: 0.9in; height: 0.68in; }
     .ultra-compact .logo { width: 0.78in; height: 0.58in; }
+    .micro-compact .logo { width: 0.62in; height: 0.44in; }
     .tagline { font-family: Georgia, serif; font-size: 10px; font-weight: 700; color: #111; }
     .address {
       color: #0d3326;
@@ -3037,12 +3045,15 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .address { padding-top: 0.2in; font-size: 11px; }
     .ultra-compact .address { padding-top: 0.16in; font-size: 10px; }
+    .micro-compact .address { padding-top: 0.08in; font-size: 8.6px; line-height: 1.05; }
     .invoice-panel { padding-top: 0.07in; }
     .compact .invoice-panel { padding-top: 0.04in; }
     .ultra-compact .invoice-panel { padding-top: 0.02in; }
+    .micro-compact .invoice-panel { padding-top: 0; }
     .invoice-title { text-align: right; font-size: 21px; font-weight: 900; margin: 0 0 3px; }
     .compact .invoice-title { font-size: 17px; }
     .ultra-compact .invoice-title { font-size: 15px; }
+    .micro-compact .invoice-title { font-size: 12px; margin-bottom: 1px; }
     .meta-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -3062,6 +3073,9 @@ function printableInvoiceHtml(invoice) {
     .ultra-compact .meta-grid { font-size: 8px; border-radius: 4px; }
     .ultra-compact .meta-grid div { min-height: 15px; padding: 1px 3px; }
     .ultra-compact .meta-grid .value { font-size: 8.5px; }
+    .micro-compact .meta-grid { font-size: 7px; border-radius: 3px; }
+    .micro-compact .meta-grid div { min-height: 12px; padding: 1px 2px; }
+    .micro-compact .meta-grid .value { font-size: 7.3px; }
     .upper {
       display: grid;
       grid-template-columns: 1fr 2.65in;
@@ -3071,16 +3085,21 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .upper { min-height: 0.78in; margin-top: 0.05in; }
     .ultra-compact .upper { min-height: 0.64in; margin-top: 0.03in; }
+    .micro-compact .upper { min-height: 0.45in; margin-top: 0.02in; gap: 0.16in; grid-template-columns: 1fr 2.3in; }
     .bill-label { margin-left: 0.24in; font-size: 11px; }
     .bill-body { margin-top: 0.07in; margin-left: 0.12in; font-size: 13px; line-height: 1.06; white-space: pre-wrap; }
     .compact .bill-body { font-size: 11px; line-height: 1.02; margin-top: 0.04in; }
     .ultra-compact .bill-body { font-size: 9.5px; line-height: 1; margin-top: 0.03in; }
+    .micro-compact .bill-label { font-size: 8px; }
+    .micro-compact .bill-body { font-size: 8.1px; line-height: 0.95; margin-top: 0.01in; }
     .instructions { padding-top: 0; font-style: italic; font-size: 11.5px; line-height: 1.22; }
     .compact .instructions { font-size: 10px; line-height: 1.1; }
     .ultra-compact .instructions { font-size: 8.8px; line-height: 1.02; }
+    .micro-compact .instructions { font-size: 7.6px; line-height: 0.96; }
     .instructions h2 { margin: 0 0 2px; font-size: 12px; color: #0d3326; font-style: italic; }
     .compact .instructions h2 { font-size: 10.5px; }
     .ultra-compact .instructions h2 { font-size: 9px; }
+    .micro-compact .instructions h2 { font-size: 7.8px; margin-bottom: 1px; }
     .instructions .row { display: grid; grid-template-columns: 0.72in 1fr; gap: 5px; }
     .pre-table {
       display: grid;
@@ -3091,6 +3110,7 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .pre-table { margin-top: 0.08in; }
     .ultra-compact .pre-table { margin-top: 0.05in; }
+    .micro-compact .pre-table { margin-top: 0.03in; }
     .pre-table div {
       min-height: 32px;
       border-right: 2px solid var(--green);
@@ -3101,6 +3121,7 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .pre-table div { min-height: 25px; padding: 4px 6px; font-size: 11px; }
     .ultra-compact .pre-table div { min-height: 21px; padding: 3px 5px; font-size: 10px; }
+    .micro-compact .pre-table div { min-height: 16px; padding: 2px 4px; font-size: 8.4px; }
     .pre-table div:nth-child(5n) { border-right: 0; }
     .pre-head {
       background: var(--green-light);
@@ -3124,6 +3145,7 @@ function printableInvoiceHtml(invoice) {
     }
     .compact th { padding: 4px 5px; font-size: 11px; }
     .ultra-compact th { padding: 3px 4px; font-size: 10px; }
+    .micro-compact th { padding: 2px 3px; font-size: 8.5px; }
     th:last-child, td:last-child { border-right: 0; }
     td {
       border-right: 2px solid var(--green);
@@ -3134,6 +3156,7 @@ function printableInvoiceHtml(invoice) {
     }
     .compact td { height: 15px; padding: 1px 4px; font-size: 10.7px; }
     .ultra-compact td { height: 12px; padding: 1px 3px; font-size: 9.5px; }
+    .micro-compact td { height: 9px; padding: 0 2px; font-size: 7.9px; line-height: 1; }
     tbody tr:nth-child(odd) td { background: var(--gray-row); }
     th:nth-child(1), td:nth-child(1) { width: 39%; }
     th:nth-child(2), td:nth-child(2) { width: 17%; text-align: center; }
@@ -3161,6 +3184,7 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .customer-balance { min-height: 28px; padding: 3px 12px; font-size: 12px; }
     .ultra-compact .customer-balance { min-height: 24px; padding: 2px 9px; font-size: 10.5px; }
+    .micro-compact .customer-balance { min-height: 18px; padding: 1px 7px; font-size: 8.6px; }
     .totals { border-bottom: 0; }
     .totals div {
       display: grid;
@@ -3170,6 +3194,7 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .totals div { min-height: 27px; }
     .ultra-compact .totals div { min-height: 23px; }
+    .micro-compact .totals div { min-height: 18px; }
     .totals span,
     .totals strong {
       padding: 7px 9px;
@@ -3183,6 +3208,8 @@ function printableInvoiceHtml(invoice) {
     .compact .totals strong { padding: 4px 7px; font-size: 12px; }
     .ultra-compact .totals span,
     .ultra-compact .totals strong { padding: 3px 5px; font-size: 10.5px; }
+    .micro-compact .totals span,
+    .micro-compact .totals strong { padding: 2px 4px; font-size: 8.6px; }
     .totals strong {
       text-align: right;
       font-size: 15px;
@@ -3200,6 +3227,7 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .notice { min-height: 34px; padding: 5px 10px; font-size: 10px; }
     .ultra-compact .notice { min-height: 28px; padding: 4px 8px; font-size: 9px; }
+    .micro-compact .notice { min-height: 19px; padding: 2px 6px; font-size: 7.5px; }
     .footer {
       display: grid;
       grid-template-columns: 1fr 1fr 1.9fr 1.7fr;
@@ -3215,6 +3243,8 @@ function printableInvoiceHtml(invoice) {
     .compact .footer div { padding: 3px 4px; min-height: 18px; }
     .ultra-compact .footer { font-size: 8px; }
     .ultra-compact .footer div { padding: 2px 3px; min-height: 15px; }
+    .micro-compact .footer { font-size: 7px; }
+    .micro-compact .footer div { padding: 1px 2px; min-height: 12px; }
     .footer .foot-head {
       background: #edf3eb;
       color: #0d3326;
@@ -3233,6 +3263,7 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .signature-copy { margin-top: 3px; min-height: 0.3in; }
     .ultra-compact .signature-copy { margin-top: 2px; min-height: 0.22in; }
+    .micro-compact .signature-copy { margin-top: 1px; min-height: 0.15in; padding-bottom: 1px; }
     .signature-copy img {
       max-width: 100%;
       max-height: 0.34in;
@@ -3249,13 +3280,16 @@ function printableInvoiceHtml(invoice) {
     }
     .compact .signature-label { font-size: 8.5px; padding-top: 1px; }
     .ultra-compact .signature-label { font-size: 7.5px; padding-top: 1px; }
+    .micro-compact .signature-label { font-size: 6.8px; padding-top: 0; }
     @media print {
       body { background: #fff; }
       .sheet {
         margin: 0;
         width: 8.5in;
-        height: 10.76in;
+        height: calc(10.9in / var(--print-scale));
         box-shadow: none;
+        transform: scale(var(--print-scale));
+        transform-origin: top left;
       }
     }
   </style>
