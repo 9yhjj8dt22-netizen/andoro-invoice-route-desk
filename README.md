@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v51 printed invoices hide zero-order product rows.
+Current live app version: v52 store editor stays hidden until adding or editing a store.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

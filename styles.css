@@ -304,6 +304,14 @@ h2 {
   gap: 14px;
 }
 
+.store-manager-layout.editor-closed {
+  grid-template-columns: 1fr;
+}
+
+.store-manager-layout.editor-closed #storeManagerForm {
+  display: none;
+}
+
 label {
   display: grid;
   gap: 7px;

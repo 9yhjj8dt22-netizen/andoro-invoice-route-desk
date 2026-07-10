@@ -256,6 +256,7 @@ const els = {
   storeProductList: document.querySelector("#storeProductList"),
   storeOrderNotice: document.querySelector("#storeOrderNotice"),
   storeManagerSearch: document.querySelector("#storeManagerSearch"),
+  storeManagerLayout: document.querySelector("#storeManagerLayout"),
   storeManagerList: document.querySelector("#storeManagerList"),
   storeManagerForm: document.querySelector("#storeManagerForm"),
   storeManagerTitle: document.querySelector("#storeManagerTitle"),
@@ -2216,7 +2217,23 @@ function renderStoreManager() {
   });
 }
 
+function showStoreManagerEditor() {
+  els.storeManagerLayout?.classList.remove("editor-closed");
+}
+
+function hideStoreManagerEditor() {
+  els.storeManagerLayout?.classList.add("editor-closed");
+  els.storeManagerForm.reset();
+  els.storeManagerId.value = "";
+  els.storeManagerTitle.textContent = "Add Store";
+  els.storeManagerTerms.value = "Net 10";
+  els.storeManagerRep.value = DEFAULT_REP;
+  els.storeManagerDeliveryFee.value = "";
+  renderStoreManager();
+}
+
 function resetStoreManagerForm() {
+  showStoreManagerEditor();
   els.storeManagerForm.reset();
   els.storeManagerId.value = "";
   els.storeManagerTitle.textContent = "Add Store";
@@ -2229,6 +2246,7 @@ function resetStoreManagerForm() {
 function editStoreManager(id) {
   const store = (state.stores || []).find((item) => item.id === id);
   if (!store) return;
+  showStoreManagerEditor();
   els.storeManagerId.value = store.id;
   els.storeManagerTitle.textContent = "Edit Store";
   els.storeManagerName.value = store.name || "";
@@ -2290,7 +2308,7 @@ function saveStoreManagerForm(event) {
   state.stores = mergeStores([], state.stores);
   saveState();
   renderStores();
-  editStoreManager(store.id);
+  hideStoreManagerEditor();
   alert("Store saved.");
 }
 
@@ -2304,7 +2322,7 @@ function deleteStoreManager() {
   state.stores = state.stores.filter((item) => item.id !== id);
   saveState();
   renderStores();
-  resetStoreManagerForm();
+  hideStoreManagerEditor();
 }
 
 function saveStoreFromForm() {
@@ -2638,7 +2656,7 @@ function attachEvents() {
   els.storeManagerForm.addEventListener("submit", saveStoreManagerForm);
   els.storeManagerSearch.addEventListener("input", renderStoreManager);
   els.newStoreRecord.addEventListener("click", resetStoreManagerForm);
-  els.clearStoreManager.addEventListener("click", resetStoreManagerForm);
+  els.clearStoreManager.addEventListener("click", hideStoreManagerEditor);
   els.deleteStoreManager.addEventListener("click", deleteStoreManager);
   els.clearInvoiceForm.addEventListener("click", resetInvoiceForm);
   els.clearSignature.addEventListener("click", clearSignaturePad);
