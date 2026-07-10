@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v50 one-page invoice printing by default.
+Current live app version: v51 printed invoices hide zero-order product rows.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

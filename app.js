@@ -944,6 +944,16 @@ function nonDeliveryItems(items = []) {
   return items.filter((item) => !isDeliveryItem(item));
 }
 
+function orderedLineItems(items = []) {
+  return (items || []).filter((item) => {
+    const qty = Number(item.qty || 0);
+    const amount = Number(item.amount || 0);
+    const rate = Number(item.rate || 0);
+    if (isDeliveryItem(item)) return amount > 0 || rate > 0;
+    return qty > 0 || amount > 0;
+  });
+}
+
 function deliveryFeeFromItems(items = [], fallback = DEFAULT_DELIVERY_FEE) {
   const delivery = items.find(isDeliveryItem);
   return delivery ? Number(delivery.amount || delivery.rate || 0) : fallback;
@@ -2937,8 +2947,9 @@ function invoiceSubject(invoice) {
 }
 
 function invoiceMessage(invoice) {
-  const items = invoice.items?.length
-    ? invoice.items.map((item) => {
+  const orderedItems = orderedLineItems(invoice.items || []);
+  const items = orderedItems.length
+    ? orderedItems.map((item) => {
       const qty = item.qty ? `${item.qty} ` : "";
       const unit = item.unit ? `${item.unit} ` : "";
       const amount = Number(item.amount || item.rate || 0);
@@ -2971,10 +2982,11 @@ function invoiceMessage(invoice) {
 
 function printableInvoiceHtml(invoice) {
   const plainAmount = (value) => Number(value || 0).toFixed(2);
-  const itemCount = invoice.items?.length || 1;
+  const printableItems = orderedLineItems(invoice.items || []);
+  const itemCount = printableItems.length || 1;
   const printMode = itemCount > 28 ? "micro-compact" : itemCount > 18 ? "ultra-compact" : itemCount > 10 ? "compact" : "";
   const printScale = itemCount > 36 ? 0.76 : itemCount > 30 ? 0.82 : itemCount > 24 ? 0.88 : itemCount > 18 ? 0.93 : 1;
-  const rows = (invoice.items || []).map((item) => `
+  const rows = printableItems.map((item) => `
     <tr>
       <td>${escapeHtml(item.description || "")}</td>
       <td>${escapeHtml(item.upc || "")}</td>
