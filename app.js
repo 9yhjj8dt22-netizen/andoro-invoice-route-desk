@@ -102,7 +102,7 @@ const sampleData = {
       id: "store-mosers-ashland",
       name: "Mosers Foods - Ashland",
       orderBlocked: true,
-      orderBlockedReason: "Lisa calls this account. Do not create an invoice for this store.",
+      orderBlockedReason: "This store is normally ordered by the office. Only make a salesman invoice for an emergency.",
       address: "Amy-Frozen Food Mgr\n109 Eastside Dr.\nAshland, MO 65010",
       terms: "Net 10",
       rep: "RRM",
@@ -132,7 +132,7 @@ const sampleData = {
       id: "store-camdenton-sal",
       name: "Camdenton SAL",
       orderBlocked: true,
-      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
+      orderBlockedReason: "This store is normally ordered by the office. Only make a salesman invoice for an emergency.",
       address: "709 N Business Rte 5\nCamdenton, MO 65020",
       products: [
         { ...catalog.supreme12, rate: 4.85 },
@@ -155,7 +155,7 @@ const sampleData = {
       id: "store-woods-lake-ozark",
       name: "Wood's Supermarket",
       orderBlocked: true,
-      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
+      orderBlockedReason: "This store is normally ordered by the office. Only make a salesman invoice for an emergency.",
       address: "2107 Bagnell Dam Blvd\nLake Ozark, MO 65049",
       products: [
         { ...catalog.bbqChicken12, rate: 5 },
@@ -205,7 +205,7 @@ const sampleData = {
       id: "store-st-louis-county-parks",
       name: "St. Louis County Parks",
       orderBlocked: true,
-      orderBlockedReason: "This store sheet already has an invoice number. Lisa handles this account.",
+      orderBlockedReason: "This store is normally ordered by the office. Only make a salesman invoice for an emergency.",
       address: "550 Weidman Road\nManchester, MO 63011",
       products: [
         { ...catalog.pepperoni12, rate: 5.45 },
@@ -764,6 +764,10 @@ function scanDelivered(scan = {}) {
   return scan.delivered !== false;
 }
 
+function scanHasInvoice(scan = {}) {
+  return Boolean(scan.savedInvoiceId || scan.number || (scan.items || []).length || String(scan.itemsText || "").trim());
+}
+
 function applyStoreToScan(scan, store) {
   if (!scan || !store) return;
   scan.matchedStoreId = store.id;
@@ -789,8 +793,8 @@ function storeBlocksOrders(store = selectedStore()) {
 }
 
 function orderBlockedMessage(store = selectedStore()) {
-  if (routeLisaOverride(store)) return "Lisa handles this stop today. Do not create, print, or share a salesman order for this store.";
-  return store?.orderBlockedReason || "This store is marked Lisa only. Do not create a salesman order for this store.";
+  if (routeLisaOverride(store)) return "This stop is marked ordered by office today. Only continue if this is an emergency salesman invoice.";
+  return store?.orderBlockedReason || "This store is normally ordered by the office. Only continue if this is an emergency salesman invoice.";
 }
 
 function setInvoiceActionsEnabled(enabled) {
@@ -804,7 +808,7 @@ function renderStoreOrderNotice() {
   const blocked = storeBlocksOrders(store);
   els.storeOrderNotice.hidden = !blocked;
   els.storeOrderNotice.textContent = blocked ? orderBlockedMessage(store) : "";
-  setInvoiceActionsEnabled(!blocked);
+  setInvoiceActionsEnabled(true);
 }
 
 function invoiceStore(invoice = {}) {
@@ -817,8 +821,7 @@ function invoiceBlocksOrders(invoice = {}) {
 
 function blockOrderAction(store = selectedStore()) {
   if (!storeBlocksOrders(store)) return false;
-  alert(orderBlockedMessage(store));
-  return true;
+  return !confirm(`${orderBlockedMessage(store)}\n\nContinue anyway?`);
 }
 
 function productKey(product = {}) {
@@ -833,7 +836,8 @@ function normalizeProduct(item = {}) {
     description: String(item.description || "").trim(),
     upc: String(item.upc || "").trim(),
     unit: String(item.unit || "ea").trim() || "ea",
-    rate: Number(item.rate || 0)
+    rate: Number(item.rate || 0),
+    facings: String(item.facings || item.facing || "").trim()
   };
 }
 
@@ -847,7 +851,8 @@ function mergeProducts(products = [], items = []) {
     byKey.set(key, {
       ...existing,
       ...product,
-      rate: Number(product.rate || existing.rate || 0)
+      rate: Number(product.rate || existing.rate || 0),
+      facings: product.facings || existing.facings || ""
     });
   });
   return [...byKey.values()].sort((a, b) => a.description.localeCompare(b.description));
@@ -939,6 +944,17 @@ function storeDeliveryFee(store = selectedStore()) {
   return store ? deliveryFeeFromItems(store.products || []) : DEFAULT_DELIVERY_FEE;
 }
 
+function allAvailableProducts(exceptStoreId = "") {
+  return mergeProducts([], (state.stores || [])
+    .filter((store) => store.id !== exceptStoreId)
+    .flatMap((store) => (store.products || []).filter((product) => !isDeliveryItem(product))));
+}
+
+function productsForStore(store = selectedStore()) {
+  const products = (store?.products || []).filter((product) => !isDeliveryItem(product));
+  return products.length ? products : allAvailableProducts(store?.id || "");
+}
+
 function itemsWithDelivery(items = []) {
   const deliveryFee = Number(els.deliveryFee?.value || 0);
   const cleanItems = nonDeliveryItems(items);
@@ -987,15 +1003,16 @@ function renderStoreProducts() {
     els.storeProductList.innerHTML = `<div class="muted">Select a store to show its available products.</div>`;
     return;
   }
-  const products = (store.products || []).filter((product) => !isDeliveryItem(product));
+  const savedProducts = (store.products || []).filter((product) => !isDeliveryItem(product));
+  const products = productsForStore(store);
   if (!products.length) {
-    els.storeProductList.innerHTML = `<div class="muted">No products saved for this store yet. Add products below, then save the invoice.</div>`;
+    els.storeProductList.innerHTML = `<div class="muted">No products saved yet. Add products on the Stores tab.</div>`;
     return;
   }
   const current = currentOrderMap();
   const title = document.createElement("div");
   title.className = "store-products-title";
-  title.textContent = "Available products for this store";
+  title.textContent = savedProducts.length ? "Available products for this store" : "No store list saved yet - showing all available products";
   els.storeProductList.append(title);
   products.forEach((product) => {
     const key = productKey(product);
@@ -1009,6 +1026,7 @@ function renderStoreProducts() {
       <div>
         <strong>${escapeHtml(product.description)}</strong>
         <span>${product.upc ? `UPC ${escapeHtml(product.upc)} - ` : ""}${escapeHtml(product.unit || "ea")} - ${money.format(Number(product.rate || 0))}</span>
+        ${product.facings ? `<span class="case-note">Facings: ${escapeHtml(product.facings)}</span>` : ""}
         ${caseSize > 1 ? `<span class="case-note">1 case = ${caseSize}; 2 cases per shelf</span>` : ""}
       </div>
       <div class="qty-cell">
@@ -1038,7 +1056,7 @@ function updateOrderFromStoreProducts() {
     const label = input.closest(".qty-cell")?.querySelector(".shelf-count");
     if (label) label.textContent = productShelfLabel(input.value, Number(input.dataset.caseSize || 1));
   });
-  const items = (store.products || []).filter((product) => !isDeliveryItem(product)).map((product) => {
+  const items = productsForStore(store).map((product) => {
     const qty = qtyByKey.get(productKey(product)) || "0";
     const rate = Number(product.rate || 0);
     const amount = Number(qty || 0) * rate;
@@ -1219,7 +1237,7 @@ function renderScans() {
       <label>Matched saved store<select data-scan-store="${scan.id}">${storeOptions}</select></label>
       <div class="route-stop-tools">
         <label>Route order<input data-scan-field="routeOrder" data-scan-id="${scan.id}" inputmode="numeric" type="number" min="1" step="1" value="${escapeAttribute(scan.routeOrder || "")}"></label>
-        <label class="checkbox-label"><input data-scan-lisa="${scan.id}" type="checkbox" ${lisaHandled ? "checked" : ""}> Lisa handles</label>
+        <label class="checkbox-label"><input data-scan-lisa="${scan.id}" type="checkbox" ${lisaHandled ? "checked" : ""}> Ordered by office</label>
         <label class="checkbox-label"><input data-scan-delivered="${scan.id}" type="checkbox" ${delivered ? "checked" : ""}> Delivered</label>
       </div>
       <label>Stop notes<textarea data-scan-field="routeNote" data-scan-id="${scan.id}" placeholder="Notes for this stop">${escapeHtml(scan.routeNote || "")}</textarea></label>
@@ -1298,11 +1316,13 @@ function renderRouteDeliverySlots() {
     const scan = (state.scans || []).find((item) => item.id === slotRecord.scanId) || assigned.get(slot);
     const selectedStoreId = slotRecord.storeId || scan?.matchedStoreId || "";
     const selectedStore = (state.stores || []).find((store) => store.id === selectedStoreId);
+    const hasInvoice = scanHasInvoice(scan);
     const scanStatus = scan
-      ? [scanLabel(scan), scan.number ? "read" : "needs invoice #", scanLisaHandled(scan) ? "Lisa handles" : "Salesman order", scanDelivered(scan) ? "Delivered" : "Not delivered"].filter(Boolean).join(" - ")
-      : "Select the store, then attach this stop's invoice.";
+      ? [scanLabel(scan), scan.number ? "invoice attached" : "no invoice attached", scanLisaHandled(scan) ? "Ordered by office" : "Salesman order", scanDelivered(scan) ? "Delivered" : "Not delivered"].filter(Boolean).join(" - ")
+      : selectedStore ? "Store selected - no invoice attached yet." : "Select the store, then attach this stop's invoice.";
     const row = document.createElement("article");
-    row.className = `route-slot${scan ? " filled" : ""}${selectedStore ? " store-selected" : ""}`;
+    const officeOrdered = scan ? scanLisaHandled(scan) : Boolean(selectedStore?.orderBlocked);
+    row.className = `route-slot${scan ? " filled" : ""}${selectedStore ? " store-selected" : ""}${selectedStore && !hasInvoice ? " missing-invoice" : ""}${officeOrdered ? " office-ordered" : ""}`;
     row.innerHTML = `
       <strong>${slot}</strong>
       <div class="route-slot-body">
@@ -1338,9 +1358,10 @@ function renderRouteDayStatus() {
   const orderedCount = routeScans().length;
   const prospectCount = state.routeDay?.prospects?.length || 0;
   const lisaCount = routeScans().filter((scan) => scanLisaHandled(scan)).length;
+  const invoiceCount = routeScans().filter(scanHasInvoice).length;
   const deliveredCount = routeScans().filter((scan) => scanDelivered(scan)).length;
   els.routeDayStatus.textContent = orderedCount
-    ? `${orderedCount} route stop${orderedCount === 1 ? "" : "s"} loaded, ${deliveredCount} delivered, ${lisaCount} Lisa handled, ${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`
+    ? `${orderedCount} route stop${orderedCount === 1 ? "" : "s"} loaded, ${invoiceCount} with invoice, ${deliveredCount} delivered, ${lisaCount} ordered by office, ${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`
     : `${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`;
   if (!stops.length) {
     els.routeDayMapsLink.classList.add("disabled");
@@ -1666,7 +1687,18 @@ function matchingInvoiceForRouteScan(scan = {}) {
 }
 
 function routeDayTotal() {
-  return routeInvoices().reduce((sum, invoice) => sum + invoiceTotal(invoice), 0);
+  return routeScans()
+    .filter((scan) => scanDelivered(scan) && scanHasInvoice(scan))
+    .reduce((sum, scan) => sum + routeInvoiceTotalForScan(scan), 0);
+}
+
+function routeInvoiceTotalForScan(scan = {}) {
+  const invoice = routeInvoiceForScan(scan);
+  if (invoice) return invoiceTotal(invoice);
+  const explicitTotal = Number(scan.total || scan.balanceDue || scan.amount || 0);
+  if (Number.isFinite(explicitTotal) && explicitTotal > 0) return explicitTotal;
+  const itemTotal = lineItemTotal(scan.items || lineItemsFromText(scan.itemsText || ""));
+  return Number.isFinite(itemTotal) && itemTotal > 0 ? itemTotal : 0;
 }
 
 function routeSummaryHtml() {
@@ -1691,8 +1723,7 @@ function routeSummaryHtml() {
     </tr>`).join("");
   const stopRows = stops.map((scan, index) => {
     const storeName = scan.customer || `Stop ${index + 1}`;
-    const invoice = routeInvoiceForScan(scan);
-    const stopInvoiceTotal = invoice ? invoiceTotal(invoice) : 0;
+    const stopInvoiceTotal = scanDelivered(scan) && scanHasInvoice(scan) ? routeInvoiceTotalForScan(scan) : 0;
     return `
       <tr>
         <td>${escapeHtml(scan.routeOrder || index + 1)}</td>
@@ -1700,18 +1731,23 @@ function routeSummaryHtml() {
           <strong>${escapeHtml(storeName)}</strong>
           <span>${escapeHtml(scan.address || "")}</span>
         </td>
-        <td>${scanLisaHandled(scan) ? "Lisa" : "Salesman"}</td>
+        <td>${scanLisaHandled(scan) ? "Office" : "Salesman"}</td>
         <td>${scanDelivered(scan) ? "Yes" : "No"}</td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
         <td>${escapeHtml(scan.routeNote || "")}</td>
       </tr>`;
   }).join("");
-  const invoiceRows = routeInvoices().map((invoice) => `
+  const invoiceRows = routeScans()
+    .filter((scan) => scanDelivered(scan) && scanHasInvoice(scan))
+    .map((scan) => {
+      const invoice = routeInvoiceForScan(scan);
+      return `
     <tr>
-      <td>${escapeHtml(invoice.customer || "")}</td>
-      <td>${escapeHtml(invoice.number || "")}</td>
-      <td class="money">${money.format(invoiceTotal(invoice))}</td>
-    </tr>`).join("");
+      <td>${escapeHtml(invoice?.customer || scan.customer || "")}</td>
+      <td>${escapeHtml(invoice?.number || scan.number || "")}</td>
+      <td class="money">${money.format(routeInvoiceTotalForScan(scan))}</td>
+    </tr>`;
+    }).join("");
   return `<!doctype html>
 <html>
 <head>
@@ -2019,7 +2055,8 @@ function storeProductsToText(products = []) {
       product.description || "",
       product.upc || "",
       product.unit || "ea",
-      product.rate ?? ""
+      product.rate ?? "",
+      product.facings || ""
     ].join(" | "))
     .join("\n");
 }
@@ -2032,7 +2069,8 @@ function storeProductsFromText(text = "") {
       description: parts[0],
       upc: parts[1] || "",
       unit: parts[2] || "ea",
-      rate: Number(parts[3] || 0)
+      rate: Number(parts[3] || 0),
+      facings: parts[4] || ""
     });
   }).filter(Boolean);
 }
@@ -2050,13 +2088,14 @@ function renderStoreManager() {
   }
   stores.forEach((store) => {
     const button = document.createElement("button");
-    button.className = `store-manager-item${store.id === selectedId ? " active" : ""}`;
+    button.className = `store-manager-item${store.id === selectedId ? " active" : ""}${store.orderBlocked ? " office-ordered" : ""}`;
     button.type = "button";
     button.dataset.storeManagerId = store.id;
+    const productCount = (store.products || []).filter((product) => !isDeliveryItem(product)).length;
     button.innerHTML = `
       <strong>${escapeHtml(store.name)}</strong>
-      <span>${escapeHtml([store.address?.split("\n").at(-1), store.orderBlocked ? "Lisa handles" : "Salesman orders"].filter(Boolean).join(" - "))}</span>
-      <small>${(store.products || []).filter((product) => !isDeliveryItem(product)).length} product${(store.products || []).length === 1 ? "" : "s"}</small>
+      <span>${escapeHtml([store.address?.split("\n").at(-1), store.orderBlocked ? "Ordered by office" : "Salesman order allowed"].filter(Boolean).join(" - "))}</span>
+      <small>${productCount} product${productCount === 1 ? "" : "s"}${store.orderBlocked ? " - Office" : ""}</small>
     `;
     els.storeManagerList.append(button);
   });
@@ -2194,7 +2233,7 @@ function loadSelectedStore() {
   els.specialInstructions.value = store.specialInstructions || "";
   if (!els.invoiceId.value) {
     els.deliveryFee.value = storeDeliveryFee(store).toFixed(2);
-    els.lineItemsText.value = lineItemsToText(itemsWithDelivery((store.products || []).filter((product) => !isDeliveryItem(product)).map((product) => ({
+    els.lineItemsText.value = lineItemsToText(itemsWithDelivery(productsForStore(store).map((product) => ({
       description: product.description,
       upc: product.upc || "",
       qty: "0",
@@ -2211,7 +2250,6 @@ function loadSelectedStore() {
 function saveAndShareInvoice() {
   if (!els.invoiceForm.reportValidity()) return;
   if (!validateRequiredOrderFields()) return;
-  if (blockOrderAction()) return;
   const invoice = saveInvoice({ keepForm: true });
   if (!invoice) return;
   emailOffice(invoice);
@@ -2220,7 +2258,6 @@ function saveAndShareInvoice() {
 function saveAndPrintInvoice() {
   if (!els.invoiceForm.reportValidity()) return;
   if (!validateRequiredOrderFields()) return;
-  if (blockOrderAction()) return;
   const invoice = saveInvoice({ keepForm: true });
   if (!invoice) return;
   printInvoice(invoice);
@@ -2235,7 +2272,6 @@ function resetStopForm() {
 function saveInvoiceFromForm(event) {
   event.preventDefault();
   if (!validateRequiredOrderFields()) return;
-  if (blockOrderAction()) return;
   saveInvoice();
 }
 
@@ -2289,8 +2325,7 @@ function invoiceFromForm() {
 
 function saveInvoice({ keepForm = false } = {}) {
   const invoice = invoiceFromForm();
-  if (invoiceBlocksOrders(invoice)) {
-    alert(orderBlockedMessage(invoiceStore(invoice)));
+  if (invoiceBlocksOrders(invoice) && blockOrderAction(invoiceStore(invoice))) {
     return null;
   }
   const index = state.invoices.findIndex((item) => item.id === invoice.id);
@@ -2707,20 +2742,20 @@ function deleteInvoiceById(id) {
 
 function emailInvoiceById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
-  if (invoiceBlocksOrders(invoice)) return alert(orderBlockedMessage(invoiceStore(invoice)));
+  if (invoiceBlocksOrders(invoice) && blockOrderAction(invoiceStore(invoice))) return;
   if (invoice) emailInvoice(invoice);
 }
 
 function emailOfficeById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
-  if (invoiceBlocksOrders(invoice)) return alert(orderBlockedMessage(invoiceStore(invoice)));
+  if (invoiceBlocksOrders(invoice) && blockOrderAction(invoiceStore(invoice))) return;
   if (invoice) emailOffice(invoice);
 }
 
 async function shareInvoiceById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
   if (!invoice) return;
-  if (invoiceBlocksOrders(invoice)) return alert(orderBlockedMessage(invoiceStore(invoice)));
+  if (invoiceBlocksOrders(invoice) && blockOrderAction(invoiceStore(invoice))) return;
   const text = invoiceMessage(invoice);
   if (navigator.share) {
     try {
@@ -2740,7 +2775,7 @@ async function shareInvoiceById(id) {
 function printInvoiceById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
   if (!invoice) return;
-  if (invoiceBlocksOrders(invoice)) return alert(orderBlockedMessage(invoiceStore(invoice)));
+  if (invoiceBlocksOrders(invoice) && blockOrderAction(invoiceStore(invoice))) return;
   printInvoice(invoice);
 }
 
@@ -3381,6 +3416,40 @@ function assignScanToRouteSlot(scan, slot) {
   if (slotRecord) slotRecord.scanId = scan.id;
 }
 
+function placeholderScanForStore(store, slot) {
+  return {
+    id: crypto.randomUUID(),
+    fileName: "",
+    customer: store.name || "",
+    customerEmail: store.email || "",
+    address: store.address || "",
+    number: "",
+    invoiceDate: routeDate(),
+    terms: store.terms || "",
+    poNumber: store.poNumber || "",
+    rep: store.rep || routeRep(),
+    mainPhone: store.mainPhone || "",
+    altPhone: store.altPhone || "",
+    dt: store.dt || "",
+    specialInstructions: store.specialInstructions || "",
+    items: [],
+    itemsText: "",
+    total: 0,
+    amount: 0,
+    balanceDue: 0,
+    paymentsCredits: 0,
+    customerTotalBalance: 0,
+    rawText: "",
+    accepted: true,
+    delivered: true,
+    lisaHandled: Boolean(store.orderBlocked),
+    matchedStoreId: store.id,
+    routeOrder: Number(slot),
+    deliverySlot: Number(slot),
+    routeNote: ""
+  };
+}
+
 async function processRouteSlotFile(file, slot) {
   if (!file) return;
   const slotRecord = routeDeliverySlot(slot);
@@ -3556,25 +3625,36 @@ function buildRouteFromDeliverySlots() {
     }))
     .filter((entry) => entry.store || entry.scan);
   if (!filledSlots.length) {
-    alert("Add at least one store and invoice to the delivery spots before building the route.");
+    alert("Add at least one store to the delivery spots before building the route.");
     return;
   }
   const missingStore = filledSlots.filter((entry) => !entry.store).length;
-  const missingInvoice = filledSlots.filter((entry) => entry.store && !entry.scan).length;
-  if (missingStore || missingInvoice) {
-    alert(`${missingStore ? `${missingStore} delivery spot${missingStore === 1 ? "" : "s"} need a store. ` : ""}${missingInvoice ? `${missingInvoice} delivery spot${missingInvoice === 1 ? "" : "s"} need an attached invoice.` : ""}`.trim());
+  if (missingStore) {
+    alert(`${missingStore} delivery spot${missingStore === 1 ? "" : "s"} need a store.`);
     return;
   }
+  let missingInvoice = 0;
   filledSlots.forEach((entry) => {
+    if (!entry.scan) {
+      entry.scan = placeholderScanForStore(entry.store, entry.slot.slot);
+      state.scans = state.scans || [];
+      state.scans.push(entry.scan);
+      missingInvoice += 1;
+    } else if (!scanHasInvoice(entry.scan)) {
+      missingInvoice += 1;
+    }
     applyStoreToScan(entry.scan, entry.store);
     assignScanToRouteSlot(entry.scan, entry.slot.slot);
     entry.scan.accepted = true;
   });
-  const result = saveScansAsInvoices(filledSlots.map((entry) => entry.scan));
+  const invoiceScans = filledSlots.map((entry) => entry.scan).filter((scan) => scanHasInvoice(scan) && scanReadyToSave(scan));
+  const reviewCount = filledSlots.map((entry) => entry.scan).filter((scan) => scanHasInvoice(scan) && !scanReadyToSave(scan)).length;
+  const result = invoiceScans.length ? saveScansAsInvoices(invoiceScans) : { saved: 0, lisaCount: 0, skipped: 0 };
   if (!result) return;
+  saveState();
   render();
   setTab("scan");
-  alert(`Route built. ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${result.lisaCount ? ` ${result.lisaCount} Lisa-handled stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores only.` : ""}`);
+  alert(`Route built. ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
 }
 
 function saveScannedInvoices() {
@@ -3582,7 +3662,7 @@ function saveScannedInvoices() {
   if (!result) return;
   render();
   setTab("invoices");
-  alert(`${result.saved} scanned invoice${result.saved === 1 ? "" : "s"} saved.${result.skipped ? ` ${result.skipped} already saved.` : ""}${result.lisaCount ? ` ${result.lisaCount} Lisa-handled stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores only.` : ""}`);
+  alert(`${result.saved} scanned invoice${result.saved === 1 ? "" : "s"} saved.${result.skipped ? ` ${result.skipped} already saved.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
 }
 
 setupAccessGate();

@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "47";
+        const currentVersion = "48";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v47")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v48")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=47">
+    <link rel="stylesheet" href="styles.css?v=48">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -586,15 +586,15 @@
               </label>
               <label class="checkbox-label store-manager-checkbox">
                 <input id="storeManagerBlocked" type="checkbox">
-                Lisa handles this store / do not allow salesman orders
+                Ordered by office
               </label>
               <label>
-                Lisa note
-                <input id="storeManagerBlockedReason" placeholder="Reason shown when orders are blocked">
+                Office-order note
+                <input id="storeManagerBlockedReason" placeholder="Warning shown before making an emergency invoice">
               </label>
               <label>
-                Products
-                <textarea id="storeManagerProducts" rows="10" placeholder="Description | UPC | U/M | Rate"></textarea>
+                Products carried / facings
+                <textarea id="storeManagerProducts" rows="10" placeholder="Description | UPC | U/M | Rate | Facings"></textarea>
               </label>
               <div class="button-row">
                 <button class="primary-button" id="saveStoreManager" type="submit">Save store</button>
@@ -660,7 +660,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=47"></script>
+    <script src="app.js?v=48"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
