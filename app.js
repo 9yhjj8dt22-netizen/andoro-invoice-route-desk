@@ -7,6 +7,7 @@ const TAB_HEADERS = {
   invoices: "Check Store Needs - Build Order - Get Signature - Print / Share",
   scan: "Route Organizer / Summary",
   stores: "Stores / Products / Account Rules",
+  products: "Products / Cleanup / Master List",
   settings: "Office Contact / Backup / Reset"
 };
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -91,6 +92,8 @@ const sampleData = {
   stops: [],
   optimizedStopIds: [],
   deletedStoreIds: [],
+  deletedProductKeys: [],
+  products: [],
   routeDay: {
     date: "",
     rep: DEFAULT_REP,
@@ -265,6 +268,8 @@ const els = {
   storeManagerName: document.querySelector("#storeManagerName"),
   storeManagerEmail: document.querySelector("#storeManagerEmail"),
   storeManagerAddress: document.querySelector("#storeManagerAddress"),
+  storeManagerLat: document.querySelector("#storeManagerLat"),
+  storeManagerLng: document.querySelector("#storeManagerLng"),
   storeManagerTerms: document.querySelector("#storeManagerTerms"),
   storeManagerPo: document.querySelector("#storeManagerPo"),
   storeManagerRep: document.querySelector("#storeManagerRep"),
@@ -276,6 +281,8 @@ const els = {
   storeManagerBlocked: document.querySelector("#storeManagerBlocked"),
   storeManagerBlockedReason: document.querySelector("#storeManagerBlockedReason"),
   storeManagerProducts: document.querySelector("#storeManagerProducts"),
+  storeManagerShelfInfo: document.querySelector("#storeManagerShelfInfo"),
+  tagStoreLocation: document.querySelector("#tagStoreLocation"),
   newStoreRecord: document.querySelector("#newStoreRecord"),
   clearStoreManager: document.querySelector("#clearStoreManager"),
   saveStoreManager: document.querySelector("#saveStoreManager"),
@@ -376,7 +383,21 @@ const els = {
   routeDayMapsLink: document.querySelector("#routeDayMapsLink"),
   clearRouteDay: document.querySelector("#clearRouteDay"),
   buildRoute: document.querySelector("#buildRoute"),
-  printRouteSummary: document.querySelector("#printRouteSummary")
+  printRouteSummary: document.querySelector("#printRouteSummary"),
+  productSearch: document.querySelector("#productSearch"),
+  productManagerList: document.querySelector("#productManagerList"),
+  productManagerForm: document.querySelector("#productManagerForm"),
+  productManagerTitle: document.querySelector("#productManagerTitle"),
+  productManagerKey: document.querySelector("#productManagerKey"),
+  productManagerDescription: document.querySelector("#productManagerDescription"),
+  productManagerUpc: document.querySelector("#productManagerUpc"),
+  productManagerUnit: document.querySelector("#productManagerUnit"),
+  productManagerRate: document.querySelector("#productManagerRate"),
+  productManagerFrozenPizza: document.querySelector("#productManagerFrozenPizza"),
+  newProductRecord: document.querySelector("#newProductRecord"),
+  clearProductManager: document.querySelector("#clearProductManager"),
+  saveProductManager: document.querySelector("#saveProductManager"),
+  deleteProductManager: document.querySelector("#deleteProductManager")
 };
 
 function normalizeAccessCode(value = "") {
@@ -450,6 +471,8 @@ function normalizeState(nextState) {
   nextState.origin = fixedRouteOrigin();
   nextState.invoices = (nextState.invoices || []).filter((invoice) => !isDemoInvoice(invoice));
   nextState.stops = (nextState.stops || []).filter((stop) => !["North Lake Supply", "Riverbend Builders"].includes(stop.name));
+  nextState.products = mergeProducts([], nextState.products || []);
+  nextState.deletedProductKeys = Array.isArray(nextState.deletedProductKeys) ? nextState.deletedProductKeys : [];
   nextState.deletedStoreIds = Array.isArray(nextState.deletedStoreIds) ? nextState.deletedStoreIds : [];
   const deletedStoreIds = new Set(nextState.deletedStoreIds);
   const seededStores = structuredClone(sampleData.stores).filter((store) => !deletedStoreIds.has(store.id));
@@ -529,6 +552,12 @@ function lineItemTotal(items = []) {
   return (items || []).reduce((sum, item) => sum + Number(item.amount || 0), 0);
 }
 
+function pieceCount(items = []) {
+  return orderedLineItems(items || [])
+    .filter((item) => !isDeliveryItem(item))
+    .reduce((sum, item) => sum + Number(item.qty || 0), 0);
+}
+
 function invoiceTotal(invoice) {
   const explicitTotal = Number(invoice.total || invoice.amount || invoice.balanceDue || 0);
   if (Number.isFinite(explicitTotal) && explicitTotal > 0) return explicitTotal;
@@ -582,6 +611,7 @@ function render() {
   renderAttention();
   renderStores();
   renderStoreManager();
+  renderProductsManager();
   renderInvoices();
   renderRoute();
   renderScans();
@@ -782,7 +812,7 @@ function scanDelivered(scan = {}) {
 }
 
 function scanHasInvoice(scan = {}) {
-  return Boolean(scan.savedInvoiceId || scan.number || (scan.items || []).length || String(scan.itemsText || "").trim());
+  return Boolean(scan.savedInvoiceId || scan.number || Number(scan.total || scan.amount || scan.balanceDue || 0) || (scan.items || []).length || String(scan.itemsText || "").trim());
 }
 
 function applyStoreToScan(scan, store) {
@@ -790,7 +820,7 @@ function applyStoreToScan(scan, store) {
   scan.matchedStoreId = store.id;
   scan.customer = store.name || scan.customer;
   scan.customerEmail = scan.customerEmail || store.email || "";
-  scan.address = store.address || scan.address || "";
+  scan.address = scan.address || store.address || "";
   scan.terms = scan.terms || store.terms || "";
   scan.poNumber = scan.poNumber || store.poNumber || "";
   scan.rep = scan.rep || store.rep || "";
@@ -799,6 +829,8 @@ function applyStoreToScan(scan, store) {
   scan.dt = scan.dt || store.dt || "";
   scan.specialInstructions = scan.specialInstructions || store.specialInstructions || "";
   scan.storeNotes = store.specialInstructions || scan.storeNotes || "";
+  scan.lat = scan.lat || store.lat || 0;
+  scan.lng = scan.lng || store.lng || 0;
   scan.lisaHandled = Boolean(store.orderBlocked);
   scan.importWarning = scan.number ? "" : "Needs invoice number";
   scan.accepted = Boolean(scan.number);
@@ -848,19 +880,23 @@ function blockOrderAction(store = selectedStore()) {
 function productKey(product = {}) {
   const upc = String(product.upc || "").trim().toLowerCase();
   const description = String(product.description || "").trim().toLowerCase().replace(/\s+/g, " ");
-  if (isPizzaProduct(product)) return `pizza:${description}`;
+  if (isFrozenPizzaProduct(product)) return `pizza:${description}`;
   if (upc) return `upc:${upc}`;
   return `desc:${description}|${String(product.unit || "").trim().toLowerCase()}`;
 }
 
 function normalizeProduct(item = {}) {
-  return {
-    id: productKey(item) || crypto.randomUUID(),
+  const product = {
     description: String(item.description || "").trim(),
     upc: String(item.upc || "").trim(),
     unit: String(item.unit || "ea").trim() || "ea",
     rate: Number(item.rate || 0),
-    facings: String(item.facings || item.facing || "").trim()
+    facings: String(item.facings || item.facing || "").trim(),
+    frozenPizza: typeof item.frozenPizza === "boolean" ? item.frozenPizza : isFrozenPizzaProduct(item)
+  };
+  return {
+    id: productKey(product) || crypto.randomUUID(),
+    ...product
   };
 }
 
@@ -875,10 +911,11 @@ function mergeProducts(products = [], items = []) {
       ...existing,
       ...product,
       rate: Number(product.rate || existing.rate || 0),
-      facings: product.facings || existing.facings || ""
+      facings: product.facings || existing.facings || "",
+      frozenPizza: Boolean(product.frozenPizza || existing.frozenPizza)
     });
   });
-  return [...byKey.values()].sort((a, b) => a.description.localeCompare(b.description));
+  return [...byKey.values()].sort(sortProductsForUse);
 }
 
 function mergeStores(baseStores = [], incomingStores = []) {
@@ -900,6 +937,9 @@ function mergeStores(baseStores = [], incomingStores = []) {
       address,
       orderBlocked: incomingOrderRule ? Boolean(store.orderBlocked) : Boolean(existing.orderBlocked),
       orderBlockedReason: incomingOrderRule ? store.orderBlockedReason || "" : existing.orderBlockedReason || "",
+      lat: hasOwn(store, "lat") ? Number(store.lat || 0) : Number(existing.lat || 0),
+      lng: hasOwn(store, "lng") ? Number(store.lng || 0) : Number(existing.lng || 0),
+      shelfInfo: hasOwn(store, "shelfInfo") ? store.shelfInfo || "" : existing.shelfInfo || "",
       products: incomingProducts ? mergeProducts([], store.products || []) : mergeProducts(existing.products || [], [])
     };
     if (existingIndex >= 0) stores[existingIndex] = merged;
@@ -927,9 +967,9 @@ function mergeStoreFromInvoice(targetState, invoice) {
     : [];
   const store = {
     id: existing?.id || crypto.randomUUID(),
-    name: formatStoreName(existing?.name || invoice.customer, invoice.address || existing?.address || ""),
+    name: formatStoreName(existing?.name || invoice.customer, existing?.address || invoice.address || ""),
     email: invoice.customerEmail || existing?.email || "",
-    address: invoice.address || existing?.address || "",
+    address: existing?.address || invoice.address || "",
     terms: invoice.terms || existing?.terms || "",
     poNumber: invoice.poNumber || existing?.poNumber || "",
     rep: invoice.rep || existing?.rep || "",
@@ -939,6 +979,9 @@ function mergeStoreFromInvoice(targetState, invoice) {
     altPhone: invoice.altPhone || existing?.altPhone || "",
     dt: invoice.dt || existing?.dt || "",
     specialInstructions: invoice.specialInstructions || existing?.specialInstructions || "",
+    lat: existing?.lat || 0,
+    lng: existing?.lng || 0,
+    shelfInfo: existing?.shelfInfo || "",
     products: mergeProducts(existing?.products || [], [...invoiceItems, ...deliveryProducts])
   };
   const index = targetState.stores.findIndex((item) => item.id === store.id);
@@ -986,10 +1029,30 @@ function isPizzaProduct(product = {}) {
   return /\bpizza\b/.test(description) || /andoro\s+(?:9|12)"/.test(description) || /st\.?\s*louis\s*style/.test(description);
 }
 
+function isFrozenPizzaProduct(product = {}) {
+  const description = String(product.description || "").toLowerCase();
+  return /andoro/.test(description) && /\b(?:9|12)\s*["']?/.test(description) && /\bpizza\b|st\.?\s*louis\s*style/.test(description) && !/kit|sauce|delivery|fee|charge|credit/.test(description);
+}
+
+function sortProductsForUse(a, b) {
+  const frozen = Number(Boolean(b.frozenPizza || isFrozenPizzaProduct(b))) - Number(Boolean(a.frozenPizza || isFrozenPizzaProduct(a)));
+  if (frozen) return frozen;
+  const pizza = Number(isPizzaProduct(b)) - Number(isPizzaProduct(a));
+  if (pizza) return pizza;
+  return String(a.description || "").localeCompare(String(b.description || ""));
+}
+
+function masterProducts() {
+  const deleted = new Set(state.deletedProductKeys || []);
+  const seeded = Object.values(catalog).map(normalizeProduct);
+  const fromStores = (state.stores || []).flatMap((store) => store.products || []);
+  return mergeProducts([], [...seeded, ...(state.products || []), ...fromStores])
+    .filter((product) => !deleted.has(productKey(product)));
+}
+
 function allAvailableProducts(exceptStoreId = "") {
-  return mergeProducts([], (state.stores || [])
-    .filter((store) => store.id !== exceptStoreId)
-    .flatMap((store) => (store.products || []).filter((product) => !isDeliveryItem(product) && isPizzaProduct(product))));
+  return mergeProducts([], masterProducts()
+    .filter((product) => !isDeliveryItem(product) && isFrozenPizzaProduct(product)));
 }
 
 function productsForStore(store = selectedStore()) {
@@ -1014,9 +1077,7 @@ function itemsWithDelivery(items = []) {
 }
 
 function productCaseSize(product = {}) {
-  const description = String(product.description || "").toLowerCase();
-  if (/delivery|fee|charge|subtotal|credit/.test(description)) return 1;
-  return /pizza|andoro\s+(?:9|12)"|st\.?\s*louis\s*style/.test(description) ? PIZZAS_PER_CASE : 1;
+  return product.frozenPizza || isFrozenPizzaProduct(product) ? PIZZAS_PER_CASE : 1;
 }
 
 function productShelfLabel(qty, caseSize) {
@@ -1384,6 +1445,10 @@ function renderRouteDeliverySlots() {
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
       ${scan ? `
         <div class="route-slot-notes">
+          <div class="field-row">
+            <label>Invoice #<input data-scan-field="number" data-scan-id="${scan.id}" value="${escapeAttribute(scan.number || "")}" placeholder="Invoice number"></label>
+            <label>Invoice total<input data-scan-field="total" data-scan-id="${scan.id}" type="number" step="0.01" value="${Number(scan.total || scan.amount || scan.balanceDue || 0) || ""}" placeholder="0.00"></label>
+          </div>
           ${storeNotes ? `<div class="store-note-box"><strong>Store notes</strong><span>${escapeHtml(storeNotes)}</span></div>` : ""}
           <label>Stop notes<textarea data-scan-field="routeNote" data-scan-id="${scan.id}" rows="2" placeholder="Anything that happened at this stop">${escapeHtml(stopNoteValue)}</textarea></label>
         </div>
@@ -1881,6 +1946,7 @@ function routeSummaryHtml() {
     const invoice = routeInvoiceForScan(scan);
     const invoiceNumber = invoice?.number || scan.number || "";
     const stopInvoiceTotal = scanDelivered(scan) && scanHasInvoice(scan) ? routeInvoiceTotalForScan(scan) : 0;
+    const stopPieces = pieceCount(invoice?.items || scan.items || lineItemsFromText(scan.itemsText || ""));
     return `
       <tr>
         <td>${escapeHtml(scan.routeOrder || index + 1)}</td>
@@ -1889,6 +1955,7 @@ function routeSummaryHtml() {
           <span>${escapeHtml(scan.address || "")}</span>
         </td>
         <td>${escapeHtml(invoiceNumber)}</td>
+        <td class="money">${stopPieces || ""}</td>
         <td>${scanLisaHandled(scan) ? "Office" : "Salesman"}</td>
         <td>${scanDelivered(scan) ? "Yes" : "No"}</td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
@@ -1952,8 +2019,8 @@ function routeSummaryHtml() {
     <section class="notes">${escapeHtml(state.routeDay?.notes || "No general day notes.").replace(/\n/g, "<br>")}</section>
     <h2>Today's Route</h2>
     <table>
-      <thead><tr><th>Order</th><th>Store</th><th>Invoice #</th><th>Handled By</th><th>Delivered</th><th>Invoice Total</th><th>Notes</th></tr></thead>
-      <tbody>${stopRows || `<tr><td colspan="7">No route stops loaded.</td></tr>`}</tbody>
+      <thead><tr><th>Order</th><th>Store</th><th>Invoice #</th><th>Pieces</th><th>Handled By</th><th>Delivered</th><th>Invoice Total</th><th>Notes</th></tr></thead>
+      <tbody>${stopRows || `<tr><td colspan="8">No route stops loaded.</td></tr>`}</tbody>
     </table>
     <h2>Gas / Expense Receipts</h2>
     <table>
@@ -2253,8 +2320,107 @@ function renderStoreManager() {
   });
 }
 
+function renderProductsManager() {
+  if (!els.productManagerList) return;
+  const query = normalizedName(els.productSearch?.value || "");
+  const products = masterProducts()
+    .filter((product) => !query || normalizedName(`${product.description} ${product.upc}`).includes(query));
+  els.productManagerList.replaceChildren();
+  if (!products.length) {
+    els.productManagerList.append(emptyState());
+    return;
+  }
+  products.forEach((product) => {
+    const button = document.createElement("button");
+    button.className = `store-manager-item${product.frozenPizza ? " frozen-product" : ""}`;
+    button.type = "button";
+    button.dataset.productManagerKey = productKey(product);
+    button.innerHTML = `
+      <strong>${escapeHtml(product.description)}</strong>
+      <span>${escapeHtml([product.upc ? `UPC ${product.upc}` : "", product.unit || "ea", money.format(Number(product.rate || 0))].filter(Boolean).join(" - "))}</span>
+      <small>${product.frozenPizza ? "Frozen pizza - 2 cases per shelf" : "Other product"}</small>
+    `;
+    els.productManagerList.append(button);
+  });
+}
+
+function productFromManagerForm() {
+  return normalizeProduct({
+    description: els.productManagerDescription.value.trim(),
+    upc: els.productManagerUpc.value.trim(),
+    unit: els.productManagerUnit.value.trim() || "ea",
+    rate: Number(els.productManagerRate.value || 0),
+    frozenPizza: els.productManagerFrozenPizza.checked
+  });
+}
+
+function resetProductManagerForm() {
+  els.productManagerForm.reset();
+  els.productManagerKey.value = "";
+  els.productManagerTitle.textContent = "New Product";
+  els.productManagerUnit.value = "ea";
+}
+
+function editProductManager(key) {
+  const product = masterProducts().find((item) => productKey(item) === key);
+  if (!product) return;
+  els.productManagerKey.value = productKey(product);
+  els.productManagerTitle.textContent = "Edit Product";
+  els.productManagerDescription.value = product.description || "";
+  els.productManagerUpc.value = product.upc || "";
+  els.productManagerUnit.value = product.unit || "ea";
+  els.productManagerRate.value = Number(product.rate || 0) || "";
+  els.productManagerFrozenPizza.checked = Boolean(product.frozenPizza || isFrozenPizzaProduct(product));
+}
+
+function saveProductManagerForm(event) {
+  event.preventDefault();
+  if (!els.productManagerDescription.value.trim()) {
+    alert("Enter the product description first.");
+    els.productManagerDescription.focus();
+    return;
+  }
+  const oldKey = els.productManagerKey.value;
+  const product = productFromManagerForm();
+  state.deletedProductKeys = (state.deletedProductKeys || []).filter((key) => key !== productKey(product));
+  state.products = mergeProducts(
+    [],
+    [...(state.products || []).filter((item) => productKey(item) !== oldKey && productKey(item) !== productKey(product)), product]
+  );
+  (state.stores || []).forEach((store) => {
+    store.products = mergeProducts([], (store.products || []).map((item) => {
+      if (oldKey && productKey(item) === oldKey) return { ...item, ...product, facings: item.facings || product.facings || "" };
+      return item;
+    }));
+  });
+  saveState();
+  renderProductsManager();
+  renderStoreProducts();
+  editProductManager(productKey(product));
+  alert("Product saved.");
+}
+
+function deleteProductManager() {
+  const key = els.productManagerKey.value;
+  if (!key) return;
+  const product = masterProducts().find((item) => productKey(item) === key);
+  if (!product || !confirm(`Delete ${product.description} from products and store product lists?`)) return;
+  state.deletedProductKeys = Array.isArray(state.deletedProductKeys) ? state.deletedProductKeys : [];
+  if (!state.deletedProductKeys.includes(key)) state.deletedProductKeys.push(key);
+  state.products = (state.products || []).filter((item) => productKey(item) !== key);
+  (state.stores || []).forEach((store) => {
+    store.products = (store.products || []).filter((item) => productKey(item) !== key);
+  });
+  saveState();
+  resetProductManagerForm();
+  renderProductsManager();
+  renderStores();
+  renderStoreProducts();
+}
+
 function showStoreManagerEditor() {
   els.storeManagerLayout?.classList.remove("editor-closed");
+  requestAnimationFrame(() => els.storeManagerForm?.scrollIntoView({ behavior: "smooth", block: "start" }));
 }
 
 function hideStoreManagerEditor() {
@@ -2265,6 +2431,9 @@ function hideStoreManagerEditor() {
   els.storeManagerTerms.value = "Net 10";
   els.storeManagerRep.value = DEFAULT_REP;
   els.storeManagerDeliveryFee.value = "";
+  els.storeManagerLat.value = "";
+  els.storeManagerLng.value = "";
+  els.storeManagerShelfInfo.value = "";
   renderStoreManager();
 }
 
@@ -2276,6 +2445,9 @@ function resetStoreManagerForm() {
   els.storeManagerTerms.value = "Net 10";
   els.storeManagerRep.value = DEFAULT_REP;
   els.storeManagerDeliveryFee.value = "";
+  els.storeManagerLat.value = "";
+  els.storeManagerLng.value = "";
+  els.storeManagerShelfInfo.value = "";
   renderStoreManager();
 }
 
@@ -2288,6 +2460,8 @@ function editStoreManager(id) {
   els.storeManagerName.value = store.name || "";
   els.storeManagerEmail.value = store.email || "";
   els.storeManagerAddress.value = store.address || "";
+  els.storeManagerLat.value = Number(store.lat || 0) || "";
+  els.storeManagerLng.value = Number(store.lng || 0) || "";
   els.storeManagerTerms.value = store.terms || "";
   els.storeManagerPo.value = store.poNumber || "";
   els.storeManagerRep.value = store.rep || "";
@@ -2299,6 +2473,7 @@ function editStoreManager(id) {
   els.storeManagerBlocked.checked = Boolean(store.orderBlocked);
   els.storeManagerBlockedReason.value = store.orderBlockedReason || "";
   els.storeManagerProducts.value = storeProductsToText(store.products || []);
+  els.storeManagerShelfInfo.value = store.shelfInfo || "";
   renderStoreManager();
 }
 
@@ -2314,6 +2489,8 @@ function storeFromManagerForm() {
     name: formatStoreName(els.storeManagerName.value.trim(), address),
     email: els.storeManagerEmail.value.trim(),
     address,
+    lat: Number(els.storeManagerLat.value || existing?.lat || 0),
+    lng: Number(els.storeManagerLng.value || existing?.lng || 0),
     terms: els.storeManagerTerms.value.trim(),
     poNumber: els.storeManagerPo.value.trim(),
     rep: els.storeManagerRep.value.trim(),
@@ -2323,6 +2500,7 @@ function storeFromManagerForm() {
     specialInstructions: els.storeManagerInstructions.value.trim(),
     orderBlocked: els.storeManagerBlocked.checked,
     orderBlockedReason: els.storeManagerBlockedReason.value.trim(),
+    shelfInfo: els.storeManagerShelfInfo.value.trim(),
     products: mergeProducts([], [...storeProductsFromText(els.storeManagerProducts.value), ...deliveryProducts])
   };
 }
@@ -2359,6 +2537,17 @@ function deleteStoreManager() {
   saveState();
   renderStores();
   hideStoreManagerEditor();
+}
+
+function tagStoreCurrentLocation() {
+  if (!navigator.geolocation) {
+    alert("Location is not available in this browser.");
+    return;
+  }
+  navigator.geolocation.getCurrentPosition((position) => {
+    els.storeManagerLat.value = position.coords.latitude.toFixed(6);
+    els.storeManagerLng.value = position.coords.longitude.toFixed(6);
+  }, () => alert("Could not read your location."));
 }
 
 function saveStoreFromForm() {
@@ -2727,6 +2916,12 @@ function attachEvents() {
   els.newStoreRecord.addEventListener("click", resetStoreManagerForm);
   els.clearStoreManager.addEventListener("click", hideStoreManagerEditor);
   els.deleteStoreManager.addEventListener("click", deleteStoreManager);
+  els.tagStoreLocation.addEventListener("click", tagStoreCurrentLocation);
+  els.productManagerForm.addEventListener("submit", saveProductManagerForm);
+  els.productSearch.addEventListener("input", renderProductsManager);
+  els.newProductRecord.addEventListener("click", resetProductManagerForm);
+  els.clearProductManager.addEventListener("click", resetProductManagerForm);
+  els.deleteProductManager.addEventListener("click", deleteProductManager);
   els.clearInvoiceForm.addEventListener("click", resetInvoiceForm);
   els.clearSignature.addEventListener("click", clearSignaturePad);
   els.saveAndPrintInvoice.addEventListener("click", saveAndPrintInvoice);
@@ -2779,6 +2974,7 @@ function attachEvents() {
     const printInvoice = event.target.closest("[data-print-invoice]");
     const caseButton = event.target.closest("[data-case-key]");
     const storeManagerItem = event.target.closest("[data-store-manager-id]");
+    const productManagerItem = event.target.closest("[data-product-manager-key]");
     const deleteReceipt = event.target.closest("[data-delete-receipt]");
     const deleteProspect = event.target.closest("[data-delete-prospect]");
     const clearRouteSlot = event.target.closest("[data-clear-route-slot]");
@@ -2790,6 +2986,7 @@ function attachEvents() {
     if (printInvoice) printInvoiceById(printInvoice.dataset.printInvoice);
     if (caseButton) adjustStoreProductQty(caseButton);
     if (storeManagerItem) editStoreManager(storeManagerItem.dataset.storeManagerId);
+    if (productManagerItem) editProductManager(productManagerItem.dataset.productManagerKey);
     if (clearRouteSlot) {
       clearRouteDeliverySlot(clearRouteSlot.dataset.clearRouteSlot);
       return;
@@ -3072,6 +3269,7 @@ function invoiceMessage(invoice) {
 function printableInvoiceHtml(invoice) {
   const plainAmount = (value) => Number(value || 0).toFixed(2);
   const printableItems = orderedLineItems(invoice.items || []);
+  const totalPieces = pieceCount(printableItems);
   const itemCount = printableItems.length || 1;
   const printMode = itemCount > 28 ? "micro-compact" : itemCount > 18 ? "ultra-compact" : itemCount > 10 ? "compact" : "";
   const printScale = itemCount > 36 ? 0.76 : itemCount > 30 ? 0.82 : itemCount > 24 ? 0.88 : itemCount > 18 ? 0.93 : 1;
@@ -3285,6 +3483,18 @@ function printableInvoiceHtml(invoice) {
       font-weight: 900;
       border-right: 2px solid var(--green);
     }
+    .piece-count {
+      min-height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 22px 4px 14px;
+      color: #0d3326;
+      font-size: 13px;
+      font-weight: 900;
+      border-right: 2px solid var(--green);
+      border-top: 2px solid var(--green);
+    }
     .compact .customer-balance { min-height: 28px; padding: 3px 12px; font-size: 12px; }
     .ultra-compact .customer-balance { min-height: 24px; padding: 2px 9px; font-size: 10.5px; }
     .micro-compact .customer-balance { min-height: 18px; padding: 1px 7px; font-size: 8.6px; }
@@ -3466,6 +3676,7 @@ ${escapeHtml(invoice.customerEmail || "")}</div>
     <section class="balance-row">
       <div>
         <div class="customer-balance"><span>Customer Total Balance</span><span>${money.format(Number(invoice.customerTotalBalance || invoiceBalance(invoice)))}</span></div>
+        <div class="piece-count"><span>Piece Count</span><span>${totalPieces}</span></div>
       </div>
       <div class="totals">
         <div><span>Total</span><strong>${money.format(invoiceTotal(invoice))}</strong></div>
@@ -3727,7 +3938,7 @@ async function geocodeRouteStops(stops = []) {
   let updated = 0;
   for (const stop of missing) {
     try {
-      const coords = await geocodeAddress(stop.address);
+      const coords = await geocodeAddress(stop.address, stop.name);
       if (coords) {
         stop.lat = coords.lat;
         stop.lng = coords.lng;
@@ -3747,8 +3958,9 @@ async function geocodeRouteStops(stops = []) {
   return { updated, missing: missing.length - updated };
 }
 
-async function geocodeAddress(address = "") {
-  const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`);
+async function geocodeAddress(address = "", name = "") {
+  const query = [name, address].filter(Boolean).join(", ");
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query || address)}`);
   const results = await response.json();
   if (!results?.[0]) return null;
   return {

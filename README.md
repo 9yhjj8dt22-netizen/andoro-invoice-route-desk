@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v55 routes return to Produce Row and warn on weak map addresses.
+Current live app version: v56 products manager, store shelf/geo fields, manual route invoice tracking, and piece counts.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

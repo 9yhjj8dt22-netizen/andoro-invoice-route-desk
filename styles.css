@@ -395,6 +395,17 @@ textarea {
   color: #9f1717;
 }
 
+.store-manager-item.frozen-product {
+  border-color: #176b4d;
+  background: #eef7f2;
+  box-shadow: inset 4px 0 0 #176b4d;
+}
+
+.store-manager-item.frozen-product strong,
+.store-manager-item.frozen-product small {
+  color: #0d3326;
+}
+
 .store-manager-item strong,
 .store-manager-item span,
 .store-manager-item small {

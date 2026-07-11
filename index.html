@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "55";
+        const currentVersion = "56";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v55")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v56")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=55">
+    <link rel="stylesheet" href="styles.css?v=56">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -61,6 +61,7 @@
           <button class="tab-button active" data-tab="invoices" type="button">Invoice</button>
           <button class="tab-button" data-tab="scan" type="button">Today's Route</button>
           <button class="tab-button" data-tab="stores" type="button">Stores</button>
+          <button class="tab-button" data-tab="products" type="button">Products</button>
           <button class="tab-button" data-tab="settings" type="button">Office</button>
         </nav>
       </aside>
@@ -265,7 +266,7 @@
         </section>
 
         <section class="tab-panel active" id="invoices">
-          <div class="split-layout store-manager-layout editor-closed" id="storeManagerLayout">
+          <div class="split-layout">
             <form class="editor-panel" id="invoiceForm">
               <div class="panel-heading">
                 <h2 id="invoiceFormTitle">Add Invoice</h2>
@@ -539,7 +540,7 @@
         </section>
 
         <section class="tab-panel" id="stores">
-          <div class="split-layout">
+          <div class="split-layout store-manager-layout editor-closed" id="storeManagerLayout">
             <section class="work-panel">
               <div class="panel-heading controls-heading">
                 <h2>Saved Stores</h2>
@@ -569,6 +570,17 @@
                 Address
                 <textarea id="storeManagerAddress" rows="3" placeholder="Street, city, state"></textarea>
               </label>
+              <div class="field-row">
+                <label>
+                  Latitude
+                  <input id="storeManagerLat" step="any" type="number" placeholder="Exact latitude">
+                </label>
+                <label>
+                  Longitude
+                  <input id="storeManagerLng" step="any" type="number" placeholder="Exact longitude">
+                </label>
+              </div>
+              <button class="secondary-button" id="tagStoreLocation" type="button">Tag current location</button>
               <div class="field-row">
                 <label>
                   Terms
@@ -619,9 +631,62 @@
                 Products carried / facings
                 <textarea id="storeManagerProducts" rows="10" placeholder="Description | UPC | U/M | Rate | Facings"></textarea>
               </label>
+              <label>
+                Shelf / spacing notes
+                <textarea id="storeManagerShelfInfo" rows="5" placeholder="Example: Door 3, top shelf, 2 facings pepperoni 12&quot;, end cap opportunity"></textarea>
+              </label>
               <div class="button-row">
                 <button class="primary-button" id="saveStoreManager" type="submit">Save store</button>
                 <button class="danger-button" id="deleteStoreManager" type="button">Delete store</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <section class="tab-panel" id="products">
+          <div class="split-layout">
+            <section class="work-panel">
+              <div class="panel-heading controls-heading">
+                <h2>Products</h2>
+                <div class="control-row">
+                  <input id="productSearch" placeholder="Search products">
+                  <button class="secondary-button" id="newProductRecord" type="button">New product</button>
+                </div>
+              </div>
+              <div class="store-manager-list" id="productManagerList"></div>
+            </section>
+
+            <form class="editor-panel" id="productManagerForm">
+              <div class="panel-heading">
+                <h2 id="productManagerTitle">Edit Product</h2>
+                <button class="ghost-button" id="clearProductManager" type="button">Clear</button>
+              </div>
+              <input id="productManagerKey" type="hidden">
+              <label>
+                Description
+                <input id="productManagerDescription" required placeholder="Product description">
+              </label>
+              <label>
+                UPC
+                <input id="productManagerUpc" placeholder="UPC">
+              </label>
+              <div class="field-row">
+                <label>
+                  U/M
+                  <input id="productManagerUnit" placeholder="ea">
+                </label>
+                <label>
+                  Rate
+                  <input id="productManagerRate" min="0" step="0.01" type="number" placeholder="0.00">
+                </label>
+              </div>
+              <label class="checkbox-label store-manager-checkbox">
+                <input id="productManagerFrozenPizza" type="checkbox">
+                Frozen pizza shelf rule applies
+              </label>
+              <div class="button-row">
+                <button class="primary-button" id="saveProductManager" type="submit">Save product</button>
+                <button class="danger-button" id="deleteProductManager" type="button">Delete product</button>
               </div>
             </form>
           </div>
@@ -683,7 +748,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=55"></script>
+    <script src="app.js?v=56"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
