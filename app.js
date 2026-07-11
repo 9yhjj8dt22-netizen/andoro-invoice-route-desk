@@ -86,6 +86,7 @@ const FIXED_ROUTE_ORIGIN = {
   lat: 38.6508865,
   lng: -90.187931
 };
+let storeAddressChecks = [];
 
 const sampleData = {
   invoices: [],
@@ -283,6 +284,9 @@ const els = {
   storeManagerProducts: document.querySelector("#storeManagerProducts"),
   storeManagerShelfInfo: document.querySelector("#storeManagerShelfInfo"),
   tagStoreLocation: document.querySelector("#tagStoreLocation"),
+  checkStoreAddresses: document.querySelector("#checkStoreAddresses"),
+  storeAddressCheckStatus: document.querySelector("#storeAddressCheckStatus"),
+  storeAddressCheckList: document.querySelector("#storeAddressCheckList"),
   newStoreRecord: document.querySelector("#newStoreRecord"),
   clearStoreManager: document.querySelector("#clearStoreManager"),
   saveStoreManager: document.querySelector("#saveStoreManager"),
@@ -2311,13 +2315,98 @@ function renderStoreManager() {
     button.type = "button";
     button.dataset.storeManagerId = store.id;
     const productCount = (store.products || []).filter((product) => !isDeliveryItem(product)).length;
+    const hasGeo = Boolean(Number(store.lat) && Number(store.lng));
+    const addressStatus = addressLooksMappable(store.address || "") ? "Address ready" : "Check address";
     button.innerHTML = `
       <strong>${escapeHtml(store.name)}</strong>
       <span>${escapeHtml([store.address?.split("\n").at(-1), store.orderBlocked ? "Ordered by office" : "Salesman order allowed"].filter(Boolean).join(" - "))}</span>
-      <small>${productCount} product${productCount === 1 ? "" : "s"}${store.orderBlocked ? " - Office" : ""}</small>
+      <small>${productCount} product${productCount === 1 ? "" : "s"}${store.orderBlocked ? " - Office" : ""} - ${hasGeo ? "Geo saved" : "Needs geo"} - ${addressStatus}</small>
     `;
     els.storeManagerList.append(button);
   });
+}
+
+function renderStoreAddressCheckResults() {
+  if (!els.storeAddressCheckList) return;
+  els.storeAddressCheckList.replaceChildren();
+  if (!storeAddressChecks.length) return;
+  storeAddressChecks.forEach((check) => {
+    const card = document.createElement("div");
+    card.className = `address-check-card ${check.suggestion ? "found" : "missing"}`;
+    const savedGeo = check.hadGeo ? "Saved coordinates exist" : "No saved coordinates";
+    const addressNote = check.weakAddress ? "Address may be too weak for routing" : "Saved address looks usable";
+    card.innerHTML = `
+      <div>
+        <strong>${escapeHtml(check.name)}</strong>
+        <span>${escapeHtml(check.address || "No saved address")}</span>
+        <small>${escapeHtml(`${savedGeo} - ${addressNote}`)}</small>
+      </div>
+      <div>
+        ${check.suggestion ? `
+          <span class="address-suggestion">${escapeHtml(check.suggestion.displayName || `${check.suggestion.lat}, ${check.suggestion.lng}`)}</span>
+          <small>${Number(check.suggestion.lat).toFixed(6)}, ${Number(check.suggestion.lng).toFixed(6)}</small>
+          <div class="button-row">
+            <button class="secondary-button" data-apply-store-geo="${escapeHtml(check.storeId)}" type="button">Save coordinates</button>
+            <button class="ghost-button" data-apply-store-address="${escapeHtml(check.storeId)}" type="button">Use suggested address</button>
+          </div>
+        ` : "<span>No map match found. Edit the address or tag current location.</span>"}
+      </div>
+    `;
+    els.storeAddressCheckList.append(card);
+  });
+}
+
+async function checkStoreAddresses() {
+  if (!state.stores?.length) {
+    alert("No saved stores to check yet.");
+    return;
+  }
+  storeAddressChecks = [];
+  renderStoreAddressCheckResults();
+  els.checkStoreAddresses.disabled = true;
+  els.storeAddressCheckStatus.textContent = `Checking 0 of ${state.stores.length} stores...`;
+  for (let index = 0; index < state.stores.length; index += 1) {
+    const store = state.stores[index];
+    els.storeAddressCheckStatus.textContent = `Checking ${index + 1} of ${state.stores.length}: ${store.name}`;
+    let suggestion = null;
+    try {
+      suggestion = await geocodeAddress(store.address || "", store.name || "");
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+    } catch {
+      suggestion = null;
+    }
+    storeAddressChecks.push({
+      storeId: store.id,
+      name: store.name || "Saved store",
+      address: store.address || "",
+      hadGeo: Boolean(Number(store.lat) && Number(store.lng)),
+      weakAddress: !addressLooksMappable(store.address || ""),
+      suggestion
+    });
+    renderStoreAddressCheckResults();
+  }
+  const found = storeAddressChecks.filter((check) => check.suggestion).length;
+  const missingGeo = storeAddressChecks.filter((check) => !check.hadGeo).length;
+  els.storeAddressCheckStatus.textContent = `Checked ${state.stores.length} stores. ${found} map matches found. ${missingGeo} stores started without saved coordinates.`;
+  els.checkStoreAddresses.disabled = false;
+}
+
+function applyStoreGeoFromCheck(storeId, includeAddress = false) {
+  const check = storeAddressChecks.find((item) => item.storeId === storeId);
+  const store = (state.stores || []).find((item) => item.id === storeId);
+  if (!check?.suggestion || !store) return;
+  if (includeAddress && !confirm(`Replace the saved address for ${store.name} with the suggested map address?`)) return;
+  store.lat = Number(check.suggestion.lat);
+  store.lng = Number(check.suggestion.lng);
+  if (includeAddress) store.address = check.suggestion.displayName || store.address || "";
+  check.hadGeo = true;
+  check.address = store.address || "";
+  check.weakAddress = !addressLooksMappable(store.address || "");
+  saveState();
+  renderStores();
+  renderStoreManager();
+  renderStoreAddressCheckResults();
+  alert(includeAddress ? "Address and coordinates saved." : "Coordinates saved.");
 }
 
 function renderProductsManager() {
@@ -2913,6 +3002,7 @@ function attachEvents() {
   els.saveStore.addEventListener("click", saveStoreFromForm);
   els.storeManagerForm.addEventListener("submit", saveStoreManagerForm);
   els.storeManagerSearch.addEventListener("input", renderStoreManager);
+  els.checkStoreAddresses.addEventListener("click", checkStoreAddresses);
   els.newStoreRecord.addEventListener("click", resetStoreManagerForm);
   els.clearStoreManager.addEventListener("click", hideStoreManagerEditor);
   els.deleteStoreManager.addEventListener("click", deleteStoreManager);
@@ -2974,6 +3064,8 @@ function attachEvents() {
     const printInvoice = event.target.closest("[data-print-invoice]");
     const caseButton = event.target.closest("[data-case-key]");
     const storeManagerItem = event.target.closest("[data-store-manager-id]");
+    const applyStoreGeo = event.target.closest("[data-apply-store-geo]");
+    const applyStoreAddress = event.target.closest("[data-apply-store-address]");
     const productManagerItem = event.target.closest("[data-product-manager-key]");
     const deleteReceipt = event.target.closest("[data-delete-receipt]");
     const deleteProspect = event.target.closest("[data-delete-prospect]");
@@ -2985,6 +3077,14 @@ function attachEvents() {
     if (shareInvoice) shareInvoiceById(shareInvoice.dataset.shareInvoice);
     if (printInvoice) printInvoiceById(printInvoice.dataset.printInvoice);
     if (caseButton) adjustStoreProductQty(caseButton);
+    if (applyStoreGeo) {
+      applyStoreGeoFromCheck(applyStoreGeo.dataset.applyStoreGeo, false);
+      return;
+    }
+    if (applyStoreAddress) {
+      applyStoreGeoFromCheck(applyStoreAddress.dataset.applyStoreAddress, true);
+      return;
+    }
     if (storeManagerItem) editStoreManager(storeManagerItem.dataset.storeManagerId);
     if (productManagerItem) editProductManager(productManagerItem.dataset.productManagerKey);
     if (clearRouteSlot) {
@@ -3965,7 +4065,8 @@ async function geocodeAddress(address = "", name = "") {
   if (!results?.[0]) return null;
   return {
     lat: Number(results[0].lat),
-    lng: Number(results[0].lon)
+    lng: Number(results[0].lon),
+    displayName: results[0].display_name || ""
   };
 }
 

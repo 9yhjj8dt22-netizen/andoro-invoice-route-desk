@@ -365,6 +365,50 @@ textarea {
   gap: 8px;
 }
 
+.address-check-status {
+  margin-top: 12px;
+  font-weight: 800;
+  color: var(--green-dark);
+}
+
+.address-check-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.address-check-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.address-check-card.found {
+  border-left: 5px solid var(--green);
+}
+
+.address-check-card.missing {
+  border-left: 5px solid var(--red);
+}
+
+.address-check-card strong,
+.address-check-card span,
+.address-check-card small {
+  display: block;
+}
+
+.address-check-card small {
+  color: var(--muted);
+}
+
+.address-suggestion {
+  font-weight: 800;
+  color: var(--ink);
+}
+
 .store-manager-item {
   width: 100%;
   display: grid;

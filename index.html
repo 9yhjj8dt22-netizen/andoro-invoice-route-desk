@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "56";
+        const currentVersion = "57";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v56")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v57")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=56">
+    <link rel="stylesheet" href="styles.css?v=57">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -546,10 +546,13 @@
                 <h2>Saved Stores</h2>
                 <div class="control-row">
                   <input id="storeManagerSearch" placeholder="Search stores">
+                  <button class="secondary-button" id="checkStoreAddresses" type="button">Check addresses</button>
                   <button class="secondary-button" id="newStoreRecord" type="button">New store</button>
                 </div>
               </div>
               <div class="store-manager-list" id="storeManagerList"></div>
+              <div class="address-check-status" id="storeAddressCheckStatus"></div>
+              <div class="address-check-list" id="storeAddressCheckList"></div>
             </section>
 
             <form class="editor-panel" id="storeManagerForm">
@@ -748,7 +751,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=56"></script>
+    <script src="app.js?v=57"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");

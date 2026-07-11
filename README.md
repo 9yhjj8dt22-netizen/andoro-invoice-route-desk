@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v56 products manager, store shelf/geo fields, manual route invoice tracking, and piece counts.
+Current live app version: v57 store address checker with latitude/longitude cleanup.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
