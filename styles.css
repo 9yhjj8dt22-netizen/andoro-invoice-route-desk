@@ -776,6 +776,39 @@ th {
   padding: 8px;
 }
 
+.route-slot-notes {
+  grid-column: 2 / -1;
+  display: grid;
+  gap: 6px;
+}
+
+.route-slot-notes label {
+  margin: 0;
+}
+
+.route-slot-notes textarea {
+  min-height: 48px;
+  resize: vertical;
+}
+
+.store-note-box {
+  border: 1px solid #d7c4a3;
+  border-radius: 8px;
+  background: #fff8e8;
+  padding: 8px 10px;
+  display: grid;
+  gap: 3px;
+}
+
+.store-note-box strong {
+  color: #111;
+  font-size: 0.78rem;
+}
+
+.store-note-box span {
+  white-space: normal;
+}
+
 .route-slot.filled {
   border-color: #b8d4c8;
   background: #eef7f2;

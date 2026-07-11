@@ -96,6 +96,7 @@ const sampleData = {
     rep: DEFAULT_REP,
     startingInvoiceNumber: "",
     startTime: "",
+    finishTime: "",
     notes: "",
     deliverySlots: [],
     receipts: [],
@@ -354,6 +355,7 @@ const els = {
   routeDayRep: document.querySelector("#routeDayRep"),
   routeStartInvoice: document.querySelector("#routeStartInvoice"),
   routeStartTime: document.querySelector("#routeStartTime"),
+  routeFinishTime: document.querySelector("#routeFinishTime"),
   routeDayNotes: document.querySelector("#routeDayNotes"),
   routeDeliverySlots: document.querySelector("#routeDeliverySlots"),
   routeReceiptFiles: document.querySelector("#routeReceiptFiles"),
@@ -570,6 +572,7 @@ function render() {
   els.routeDayRep.value = routeRep();
   els.routeStartInvoice.value = state.routeDay?.startingInvoiceNumber || "";
   els.routeStartTime.value = state.routeDay?.startTime || "";
+  els.routeFinishTime.value = state.routeDay?.finishTime || "";
   els.routeDayNotes.value = state.routeDay?.notes || "";
 
   renderAttention();
@@ -771,7 +774,7 @@ function scanLisaHandled(scan = {}) {
 }
 
 function scanDelivered(scan = {}) {
-  return scan.delivered !== false;
+  return scan.delivered === true;
 }
 
 function scanHasInvoice(scan = {}) {
@@ -791,6 +794,7 @@ function applyStoreToScan(scan, store) {
   scan.altPhone = scan.altPhone || store.altPhone || "";
   scan.dt = scan.dt || store.dt || "";
   scan.specialInstructions = scan.specialInstructions || store.specialInstructions || "";
+  scan.storeNotes = store.specialInstructions || scan.storeNotes || "";
   scan.lisaHandled = Boolean(store.orderBlocked);
   scan.importWarning = scan.number ? "" : "Needs invoice number";
   scan.accepted = Boolean(scan.number);
@@ -816,8 +820,11 @@ function setInvoiceActionsEnabled(enabled) {
 function renderStoreOrderNotice() {
   const store = selectedStore();
   const blocked = storeBlocksOrders(store);
-  els.storeOrderNotice.hidden = !blocked;
-  els.storeOrderNotice.textContent = blocked ? orderBlockedMessage(store) : "";
+  const feeNotice = store && !storeHasDefaultDeliveryFee(store)
+    ? "Check the invoice for the delivery fee. This store does not have a default delivery charge saved."
+    : "";
+  els.storeOrderNotice.hidden = !blocked && !feeNotice;
+  els.storeOrderNotice.textContent = [blocked ? orderBlockedMessage(store) : "", feeNotice].filter(Boolean).join(" ");
   setInvoiceActionsEnabled(true);
 }
 
@@ -836,8 +843,10 @@ function blockOrderAction(store = selectedStore()) {
 
 function productKey(product = {}) {
   const upc = String(product.upc || "").trim().toLowerCase();
+  const description = String(product.description || "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (isPizzaProduct(product)) return `pizza:${description}`;
   if (upc) return `upc:${upc}`;
-  return `desc:${String(product.description || "").trim().toLowerCase()}|${String(product.unit || "").trim().toLowerCase()}`;
+  return `desc:${description}|${String(product.unit || "").trim().toLowerCase()}`;
 }
 
 function normalizeProduct(item = {}) {
@@ -964,10 +973,19 @@ function storeDeliveryFee(store = selectedStore()) {
   return store ? deliveryFeeFromItems(store.products || []) : DEFAULT_DELIVERY_FEE;
 }
 
+function storeHasDefaultDeliveryFee(store = selectedStore()) {
+  return Boolean(store && (store.products || []).some(isDeliveryItem));
+}
+
+function isPizzaProduct(product = {}) {
+  const description = String(product.description || "").toLowerCase();
+  return /\bpizza\b/.test(description) || /andoro\s+(?:9|12)"/.test(description) || /st\.?\s*louis\s*style/.test(description);
+}
+
 function allAvailableProducts(exceptStoreId = "") {
   return mergeProducts([], (state.stores || [])
     .filter((store) => store.id !== exceptStoreId)
-    .flatMap((store) => (store.products || []).filter((product) => !isDeliveryItem(product))));
+    .flatMap((store) => (store.products || []).filter((product) => !isDeliveryItem(product) && isPizzaProduct(product))));
 }
 
 function productsForStore(store = selectedStore()) {
@@ -1337,6 +1355,8 @@ function renderRouteDeliverySlots() {
     const selectedStoreId = slotRecord.storeId || scan?.matchedStoreId || "";
     const selectedStore = (state.stores || []).find((store) => store.id === selectedStoreId);
     const hasInvoice = scanHasInvoice(scan);
+    const storeNotes = scan?.storeNotes || selectedStore?.specialInstructions || "";
+    const stopNoteValue = scan?.routeNote || "";
     const scanStatus = scan
       ? [scanLabel(scan), scan.number ? "invoice attached" : "no invoice attached", scanLisaHandled(scan) ? "Ordered by office" : "Salesman order", scanDelivered(scan) ? "Delivered" : "Not delivered"].filter(Boolean).join(" - ")
       : selectedStore ? "Store selected - no invoice attached yet." : "Select the store, then attach this stop's invoice.";
@@ -1358,6 +1378,12 @@ function renderRouteDeliverySlots() {
       </label>
       ${scan ? `<label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${scan.id}" type="checkbox" ${scanDelivered(scan) ? "checked" : ""}> Delivered</label>` : ""}
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
+      ${scan ? `
+        <div class="route-slot-notes">
+          ${storeNotes ? `<div class="store-note-box"><strong>Store notes</strong><span>${escapeHtml(storeNotes)}</span></div>` : ""}
+          <label>Stop notes<textarea data-scan-field="routeNote" data-scan-id="${scan.id}" rows="2" placeholder="Anything that happened at this stop">${escapeHtml(stopNoteValue)}</textarea></label>
+        </div>
+      ` : selectedStore && storeNotes ? `<div class="route-slot-notes"><div class="store-note-box"><strong>Store notes</strong><span>${escapeHtml(storeNotes)}</span></div></div>` : ""}
     `;
     els.routeDeliverySlots.append(row);
   }
@@ -1472,7 +1498,7 @@ function parseInvoiceText(rawText, fileName) {
     matchedStoreId: matchedStore?.id || imported.matchedStoreId || "",
     importWarning: !matchedStore ? "Needs store match" : !invoiceNumber ? "Needs invoice number" : "",
     lisaHandled: Boolean(matchedStore?.orderBlocked),
-    delivered: true,
+    delivered: false,
     customerEmail: imported.customerEmail || "",
     address: imported.address || "",
     number: invoiceNumber,
@@ -1898,6 +1924,7 @@ function routeSummaryHtml() {
         <div>${escapeHtml(formatDate(routeDate()))}</div>
         <div>Rep: ${escapeHtml(routeRep())}</div>
         <div>Route start: ${escapeHtml(state.routeDay?.startTime || "Build time")}</div>
+        <div>Route finish: ${escapeHtml(state.routeDay?.finishTime || "")}</div>
         <div>Starting invoice #: ${escapeHtml(state.routeDay?.startingInvoiceNumber || "")}</div>
       </div>
     </header>
@@ -2419,6 +2446,11 @@ function validateRequiredOrderFields() {
     els.deliveryFee.focus();
     return false;
   }
+  const store = selectedStore();
+  if (store && !storeHasDefaultDeliveryFee(store) && !confirm("Check this invoice for the delivery fee before continuing. This store does not have a default delivery charge saved. Continue?")) {
+    els.deliveryFee.focus();
+    return false;
+  }
   return true;
 }
 
@@ -2540,6 +2572,7 @@ function saveRouteDaySettings() {
   state.routeDay.rep = els.routeDayRep.value.trim() || DEFAULT_REP;
   state.routeDay.startingInvoiceNumber = els.routeStartInvoice.value.trim();
   state.routeDay.startTime = els.routeStartTime.value;
+  state.routeDay.finishTime = els.routeFinishTime.value;
   state.routeDay.notes = els.routeDayNotes.value;
   state.routeDay.receipts = state.routeDay.receipts || [];
   state.routeDay.prospects = state.routeDay.prospects || [];
@@ -2623,6 +2656,7 @@ function clearRouteDay() {
     rep: DEFAULT_REP,
     startingInvoiceNumber: "",
     startTime: "",
+    finishTime: "",
     notes: "",
     receipts: [],
     prospects: []
@@ -2690,6 +2724,7 @@ function attachEvents() {
   els.routeDayRep.addEventListener("input", saveRouteDaySettings);
   els.routeStartInvoice.addEventListener("input", saveRouteDaySettings);
   els.routeStartTime.addEventListener("input", saveRouteDaySettings);
+  els.routeFinishTime.addEventListener("input", saveRouteDaySettings);
   els.routeDayNotes.addEventListener("input", saveRouteDaySettings);
   els.routeReceiptFiles.addEventListener("change", handleReceiptSelection);
   els.routeReceiptCamera.addEventListener("change", handleReceiptSelection);
@@ -3313,10 +3348,18 @@ function printableInvoiceHtml(invoice) {
     .micro-compact .signature-label { font-size: 6.8px; padding-top: 0; }
     @media print {
       body { background: #fff; }
+      html,
+      body {
+        width: 8.5in;
+        height: 11in;
+        overflow: hidden;
+      }
       .sheet {
         margin: 0;
         width: 8.5in;
-        height: calc(10.9in / var(--print-scale));
+        height: 11in;
+        max-height: 11in;
+        overflow: hidden;
         box-shadow: none;
         transform: scale(var(--print-scale));
         transform-origin: top left;
@@ -3613,7 +3656,7 @@ function placeholderScanForStore(store, slot) {
     customerTotalBalance: 0,
     rawText: "",
     accepted: true,
-    delivered: true,
+    delivered: false,
     lisaHandled: Boolean(store.orderBlocked),
     matchedStoreId: store.id,
     routeOrder: Number(slot),
