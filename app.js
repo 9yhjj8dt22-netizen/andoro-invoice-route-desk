@@ -1733,11 +1733,12 @@ function routeScore(stops = [], origin = fixedRouteOrigin(), startMinutes = rout
 
 function routeDistance(stops = [], origin = fixedRouteOrigin()) {
   let current = origin;
-  return stops.reduce((total, stop) => {
+  const outbound = stops.reduce((total, stop) => {
     const miles = current ? haversineMiles(current, stop) : 0;
     current = stop;
     return total + miles;
   }, 0);
+  return outbound + (stops.length ? haversineMiles(current, origin) : 0);
 }
 
 function travelMinutes(a, b) {
@@ -1797,7 +1798,21 @@ function googleMapsUrl(stops) {
   const points = [];
   points.push(encodeURIComponent(FIXED_ROUTE_ORIGIN.address));
   points.push(...stops.map((stop) => encodeURIComponent(stop.address || `${stop.lat},${stop.lng}`)));
+  points.push(encodeURIComponent(FIXED_ROUTE_ORIGIN.address));
   return `https://www.google.com/maps/dir/${points.join("/")}`;
+}
+
+function addressLooksMappable(address = "") {
+  const text = String(address || "").replace(/\s+/g, " ").trim();
+  if (!text) return false;
+  const hasStreetNumber = /\b\d{2,6}\b/.test(text);
+  const hasStreetWord = /\b(st|street|ave|avenue|rd|road|dr|drive|ln|lane|blvd|boulevard|ct|court|way|hwy|highway|route|rte|trail|row)\b/i.test(text);
+  const hasCityStateOrZip = /\b[A-Z]{2}\b\s*\d{5}\b/i.test(text) || /\b(MO|Missouri|IL|Illinois)\b/i.test(text);
+  return hasStreetNumber && hasStreetWord && hasCityStateOrZip;
+}
+
+function weakRouteAddresses(stops = []) {
+  return stops.filter((stop) => !addressLooksMappable(stop.address || ""));
 }
 
 function routeInvoices() {
@@ -1902,7 +1917,17 @@ function routeSummaryHtml() {
     th, td { border: 1px solid #176b4d; padding: 8px; vertical-align: top; }
     td span { display: block; color: #4d6158; margin-top: 3px; }
     .money { text-align: right; white-space: nowrap; }
-    @media print { .preview-actions { display: none; } main { padding: 0.25in; } }
+    @media print {
+      .preview-actions { display: none; }
+      main { padding: 0.22in; max-width: none; }
+      header { padding-bottom: 8px; }
+      img { width: 118px; }
+      h1 { font-size: 24px; }
+      h2 { margin: 14px 0 6px; font-size: 15px; }
+      .total { margin: 12px 0; padding: 10px; font-size: 18px; }
+      th, td { padding: 5px; font-size: 10.5px; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+    }
   </style>
 </head>
 <body>
@@ -3956,6 +3981,13 @@ async function buildRouteFromDeliverySlots() {
   });
   els.routeDayStatus.textContent = "Finding stop locations and building the most efficient route...";
   const routeStops = filledSlots.map(routeStopFromEntry);
+  const weakAddresses = weakRouteAddresses(routeStops);
+  if (weakAddresses.length && !confirm(`Check these store addresses before exporting to Google Maps:\n\n${weakAddresses.map((stop) => `- ${stop.name}: ${stop.address || "No address"}`).join("\n")}\n\nContinue building the route anyway?`)) {
+    els.buildRoute.disabled = false;
+    els.buildRoute.textContent = originalLabel;
+    renderRouteDayStatus();
+    return;
+  }
   const geocodeResult = await geocodeRouteStops(routeStops);
   const routableStops = routeStops.filter((stop) => Number(stop.lat) && Number(stop.lng));
   if (!routableStops.length) {
@@ -3994,7 +4026,7 @@ async function buildRouteFromDeliverySlots() {
   els.buildRoute.disabled = false;
   els.buildRoute.textContent = originalLabel;
   const miles = routeDistance(optimizedStops, fixedRouteOrigin());
-  alert(`Route built in the most efficient order from 92 Produce Row. ${optimizedStops.length} stop${optimizedStops.length === 1 ? "" : "s"} routed, about ${miles.toFixed(1)} miles before traffic.${geocodeResult.missing ? ` ${geocodeResult.missing} stop${geocodeResult.missing === 1 ? "" : "s"} could not be mapped and stayed at the end.` : ""} ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
+  alert(`Route built in the most efficient order from 92 Produce Row and returning to 92 Produce Row. ${optimizedStops.length} stop${optimizedStops.length === 1 ? "" : "s"} routed, about ${miles.toFixed(1)} miles before traffic.${geocodeResult.missing ? ` ${geocodeResult.missing} stop${geocodeResult.missing === 1 ? "" : "s"} could not be mapped and stayed at the end.` : ""} ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
 }
 
 function saveScannedInvoices() {

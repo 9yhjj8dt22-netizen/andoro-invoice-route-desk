@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "54";
+        const currentVersion = "55";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v54")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v55")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=54">
+    <link rel="stylesheet" href="styles.css?v=55">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -155,7 +155,7 @@
             <section class="route-slots-panel">
               <div class="signature-heading">
                 <span>Delivery Order</span>
-                <small>25 delivery spots. Pick the stores, then build the most efficient route from Produce Row.</small>
+                <small>25 delivery spots. Pick the stores, then build the most efficient route from Produce Row and back.</small>
                 <button class="primary-button" id="buildRoute" type="button">Build Route</button>
               </div>
               <div class="route-delivery-slots" id="routeDeliverySlots"></div>
@@ -683,7 +683,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=54"></script>
+    <script src="app.js?v=55"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");

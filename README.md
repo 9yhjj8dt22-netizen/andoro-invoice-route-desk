@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v54 route summary combines stops/invoices, adds preview exit buttons, and supports manual expenses.
+Current live app version: v55 routes return to Produce Row and warn on weak map addresses.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
