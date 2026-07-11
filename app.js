@@ -361,6 +361,10 @@ const els = {
   routeReceiptFiles: document.querySelector("#routeReceiptFiles"),
   routeReceiptCamera: document.querySelector("#routeReceiptCamera"),
   clearRouteReceipts: document.querySelector("#clearRouteReceipts"),
+  manualExpenseName: document.querySelector("#manualExpenseName"),
+  manualExpenseAmount: document.querySelector("#manualExpenseAmount"),
+  manualExpenseNotes: document.querySelector("#manualExpenseNotes"),
+  addManualExpense: document.querySelector("#addManualExpense"),
   routeReceiptGrid: document.querySelector("#routeReceiptGrid"),
   prospectName: document.querySelector("#prospectName"),
   prospectContact: document.querySelector("#prospectContact"),
@@ -1430,11 +1434,15 @@ function renderRouteDayCapture() {
       card.className = "receipt-card";
       const preview = receipt.dataUrl?.startsWith("data:image/")
         ? `<img src="${escapeAttribute(receipt.dataUrl)}" alt="${escapeAttribute(receipt.name || "Receipt")}">`
-        : `<div class="file-preview">PDF</div>`;
+        : `<div class="file-preview">${receipt.type === "manual" ? "EXP" : "PDF"}</div>`;
       card.innerHTML = `
         ${preview}
         <div>
-          <strong>${escapeHtml(receipt.name || "Receipt")}</strong>
+          <div>
+            <strong>${escapeHtml(receipt.name || "Receipt")}</strong>
+            ${Number(receipt.amount || 0) ? `<span>${money.format(Number(receipt.amount || 0))}</span>` : ""}
+            ${receipt.notes ? `<span>${escapeHtml(receipt.notes)}</span>` : ""}
+          </div>
           <button class="ghost-button" data-delete-receipt="${receipt.id}" type="button">Remove</button>
         </div>`;
       els.routeReceiptGrid.append(card);
@@ -1845,25 +1853,18 @@ function routeInvoiceTotalForScan(scan = {}) {
 function routeSummaryHtml() {
   const stops = routeScans();
   const receipts = state.routeDay?.receipts || [];
-  const prospects = state.routeDay?.prospects || [];
-  const prospectRows = prospects.map((prospect, index) => `
-    <tr>
-      <td>${index + 1}</td>
-      <td>
-        <strong>${escapeHtml(prospect.name || "New account stop")}</strong>
-        <span>${escapeHtml(prospect.address || "")}</span>
-      </td>
-      <td>${escapeHtml(prospect.contact || "")}</td>
-      <td>${escapeHtml(prospect.notes || "")}</td>
-    </tr>`).join("");
   const receiptRows = receipts.map((receipt, index) => `
     <tr>
       <td>${index + 1}</td>
       <td>${escapeHtml(receipt.name || "Receipt")}</td>
       <td>${escapeHtml(formatDate(receipt.date || routeDate()))}</td>
+      <td class="money">${Number(receipt.amount || 0) ? money.format(Number(receipt.amount || 0)) : ""}</td>
+      <td>${escapeHtml(receipt.notes || "")}</td>
     </tr>`).join("");
   const stopRows = stops.map((scan, index) => {
     const storeName = scan.customer || `Stop ${index + 1}`;
+    const invoice = routeInvoiceForScan(scan);
+    const invoiceNumber = invoice?.number || scan.number || "";
     const stopInvoiceTotal = scanDelivered(scan) && scanHasInvoice(scan) ? routeInvoiceTotalForScan(scan) : 0;
     return `
       <tr>
@@ -1872,23 +1873,13 @@ function routeSummaryHtml() {
           <strong>${escapeHtml(storeName)}</strong>
           <span>${escapeHtml(scan.address || "")}</span>
         </td>
+        <td>${escapeHtml(invoiceNumber)}</td>
         <td>${scanLisaHandled(scan) ? "Office" : "Salesman"}</td>
         <td>${scanDelivered(scan) ? "Yes" : "No"}</td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
         <td>${escapeHtml(scan.routeNote || "")}</td>
       </tr>`;
   }).join("");
-  const invoiceRows = routeScans()
-    .filter((scan) => scanDelivered(scan) && scanHasInvoice(scan))
-    .map((scan) => {
-      const invoice = routeInvoiceForScan(scan);
-      return `
-    <tr>
-      <td>${escapeHtml(invoice?.customer || scan.customer || "")}</td>
-      <td>${escapeHtml(invoice?.number || scan.number || "")}</td>
-      <td class="money">${money.format(routeInvoiceTotalForScan(scan))}</td>
-    </tr>`;
-    }).join("");
   return `<!doctype html>
 <html>
 <head>
@@ -1897,6 +1888,8 @@ function routeSummaryHtml() {
   <style>
     body { font-family: Arial, sans-serif; color: #10251d; margin: 0; background: #fff; }
     main { max-width: 8.5in; margin: 0 auto; padding: 0.35in; }
+    .preview-actions { position: sticky; top: 0; z-index: 5; display: flex; justify-content: flex-end; padding: 10px; background: #fff; border-bottom: 1px solid #ddd; }
+    .preview-actions button { border: 0; border-radius: 8px; background: #d71920; color: #111; font-weight: 900; padding: 10px 16px; cursor: pointer; }
     header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #176b4d; padding-bottom: 14px; gap: 18px; }
     img { width: 150px; height: auto; }
     h1 { margin: 0; font-size: 30px; color: #0d3326; }
@@ -1909,10 +1902,11 @@ function routeSummaryHtml() {
     th, td { border: 1px solid #176b4d; padding: 8px; vertical-align: top; }
     td span { display: block; color: #4d6158; margin-top: 3px; }
     .money { text-align: right; white-space: nowrap; }
-    @media print { main { padding: 0.25in; } }
+    @media print { .preview-actions { display: none; } main { padding: 0.25in; } }
   </style>
 </head>
 <body>
+  <div class="preview-actions"><button type="button" onclick="window.close()">Exit</button></div>
   <main>
     <header>
       <img src="assets/andoro-pizza-logo.jpg" alt="Andoro & Sons Pizza">
@@ -1931,25 +1925,15 @@ function routeSummaryHtml() {
     <section class="total"><span>Day Invoice Total</span><span>${money.format(routeDayTotal())}</span></section>
     <h2>Day Notes</h2>
     <section class="notes">${escapeHtml(state.routeDay?.notes || "No general day notes.").replace(/\n/g, "<br>")}</section>
-    <h2>Stops And Notes</h2>
+    <h2>Today's Route</h2>
     <table>
-      <thead><tr><th>Order</th><th>Store</th><th>Handled By</th><th>Delivered</th><th>Invoice Total Counted</th><th>Notes</th></tr></thead>
-      <tbody>${stopRows || `<tr><td colspan="6">No route stops loaded.</td></tr>`}</tbody>
-    </table>
-    <h2>New Account Stops</h2>
-    <table>
-      <thead><tr><th>#</th><th>Business</th><th>Contact</th><th>Notes</th></tr></thead>
-      <tbody>${prospectRows || `<tr><td colspan="4">No new account stops recorded.</td></tr>`}</tbody>
+      <thead><tr><th>Order</th><th>Store</th><th>Invoice #</th><th>Handled By</th><th>Delivered</th><th>Invoice Total</th><th>Notes</th></tr></thead>
+      <tbody>${stopRows || `<tr><td colspan="7">No route stops loaded.</td></tr>`}</tbody>
     </table>
     <h2>Gas / Expense Receipts</h2>
     <table>
-      <thead><tr><th>#</th><th>Receipt</th><th>Date Added</th></tr></thead>
-      <tbody>${receiptRows || `<tr><td colspan="3">No receipts captured.</td></tr>`}</tbody>
-    </table>
-    <h2>Today's Route Invoices</h2>
-    <table>
-      <thead><tr><th>Store</th><th>Invoice #</th><th>Invoice Total</th></tr></thead>
-      <tbody>${invoiceRows || `<tr><td colspan="3">No route invoices saved for this date.</td></tr>`}</tbody>
+      <thead><tr><th>#</th><th>Expense / Receipt</th><th>Date Added</th><th>Amount</th><th>Notes</th></tr></thead>
+      <tbody>${receiptRows || `<tr><td colspan="5">No expenses recorded.</td></tr>`}</tbody>
     </table>
   </main>
 </body>
@@ -2614,6 +2598,32 @@ async function handleReceiptSelection(event) {
   renderRouteDayCapture();
 }
 
+function addManualExpense() {
+  const name = els.manualExpenseName.value.trim();
+  const amount = Number(els.manualExpenseAmount.value || 0);
+  const notes = els.manualExpenseNotes.value.trim();
+  if (!name && !amount && !notes) {
+    alert("Add an expense name, amount, or note first.");
+    return;
+  }
+  state.routeDay = state.routeDay || structuredClone(sampleData.routeDay);
+  state.routeDay.receipts = state.routeDay.receipts || [];
+  state.routeDay.receipts.push({
+    id: crypto.randomUUID(),
+    name: name || "Manual expense",
+    type: "manual",
+    date: todayOffset(0),
+    amount,
+    notes,
+    dataUrl: ""
+  });
+  els.manualExpenseName.value = "";
+  els.manualExpenseAmount.value = "";
+  els.manualExpenseNotes.value = "";
+  saveState();
+  renderRouteDayCapture();
+}
+
 function clearRouteReceipts() {
   if (!confirm("Clear today's receipt scans?")) return;
   state.routeDay = state.routeDay || structuredClone(sampleData.routeDay);
@@ -2729,6 +2739,7 @@ function attachEvents() {
   els.routeReceiptFiles.addEventListener("change", handleReceiptSelection);
   els.routeReceiptCamera.addEventListener("change", handleReceiptSelection);
   els.clearRouteReceipts.addEventListener("click", clearRouteReceipts);
+  els.addManualExpense.addEventListener("click", addManualExpense);
   els.addProspectStop.addEventListener("click", addProspectStop);
   els.clearRouteDay.addEventListener("click", clearRouteDay);
   els.buildRoute.addEventListener("click", buildRouteFromDeliverySlots);
@@ -3062,6 +3073,8 @@ function printableInvoiceHtml(invoice) {
     * { box-sizing: border-box; }
     @page { size: letter; margin: 0; }
     body { margin: 0; background: #f1f1f1; color: #10251d; font-family: Arial, Helvetica, sans-serif; font-size: 12px; }
+    .preview-actions { position: sticky; top: 0; z-index: 5; display: flex; justify-content: flex-end; padding: 10px; background: #fff; border-bottom: 1px solid #ddd; }
+    .preview-actions button { border: 0; border-radius: 8px; background: #d71920; color: #111; font-weight: 900; padding: 10px 16px; cursor: pointer; }
     .sheet {
       --print-scale: ${printScale};
       width: 8.5in;
@@ -3347,6 +3360,7 @@ function printableInvoiceHtml(invoice) {
     .ultra-compact .signature-label { font-size: 7.5px; padding-top: 1px; }
     .micro-compact .signature-label { font-size: 6.8px; padding-top: 0; }
     @media print {
+      .preview-actions { display: none; }
       body { background: #fff; }
       html,
       body {
@@ -3368,6 +3382,7 @@ function printableInvoiceHtml(invoice) {
   </style>
 </head>
 <body>
+  <div class="preview-actions"><button type="button" onclick="window.close()">Exit</button></div>
   <main class="sheet ${printMode}">
     <header class="top">
       <section class="logo-wrap">

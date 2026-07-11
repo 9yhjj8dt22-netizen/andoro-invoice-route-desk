@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v53 batched route, delivery fee, pizza fallback, notes, and one-page print fixes.
+Current live app version: v54 route summary combines stops/invoices, adds preview exit buttons, and supports manual expenses.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "53";
+        const currentVersion = "54";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v53")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v54")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=53">
+    <link rel="stylesheet" href="styles.css?v=54">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -180,6 +180,21 @@
                     <input id="routeReceiptCamera" accept="image/*" capture="environment" multiple type="file">
                   </label>
                 </div>
+                <div class="field-row">
+                  <label>
+                    Expense
+                    <input id="manualExpenseName" placeholder="Gas, tolls, supplies">
+                  </label>
+                  <label>
+                    Amount
+                    <input id="manualExpenseAmount" min="0" step="0.01" type="number" placeholder="0.00">
+                  </label>
+                </div>
+                <label>
+                  Expense notes
+                  <textarea id="manualExpenseNotes" rows="2" placeholder="Station, odometer, reason, card/cash"></textarea>
+                </label>
+                <button class="secondary-button" id="addManualExpense" type="button">Add expense</button>
                 <div class="receipt-grid" id="routeReceiptGrid"></div>
               </section>
 
@@ -668,7 +683,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=53"></script>
+    <script src="app.js?v=54"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
