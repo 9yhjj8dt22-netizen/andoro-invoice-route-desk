@@ -837,6 +837,18 @@ th {
   gap: 6px;
 }
 
+.route-slot-attach {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.route-slot-attach select {
+  min-width: 190px;
+  flex: 1 1 190px;
+}
+
 .route-slot-notes label {
   margin: 0;
 }
@@ -1164,6 +1176,7 @@ th {
   }
 
   .route-slot .compact-file-button,
+  .route-slot .route-slot-attach,
   .route-slot .route-delivered-toggle,
   .route-slot .compact-slot-button {
     grid-column: 1 / -1;

@@ -1243,6 +1243,7 @@ function renderInvoices() {
         <button class="icon-action" data-email-invoice="${invoice.id}" type="button">Customer</button>
         <button class="icon-action" data-office-invoice="${invoice.id}" type="button">Office</button>
         <button class="icon-action" data-share-invoice="${invoice.id}" type="button">Share</button>
+        <button class="icon-action" data-download-invoice="${invoice.id}" type="button">Save</button>
         <button class="icon-action" data-print-invoice="${invoice.id}" type="button">Print</button>
       </div></td>
       <td><div class="row-actions">
@@ -1400,6 +1401,24 @@ function scanLabel(scan = {}) {
   return [scan.customer || "Invoice", scan.number ? `#${scan.number}` : "", scan.fileName || ""].filter(Boolean).join(" - ");
 }
 
+function invoiceOptionsHtml(selectedInvoiceId = "") {
+  const routeDay = routeDate();
+  const invoices = [...(state.invoices || [])]
+    .sort((a, b) => {
+      const dateCompare = String(invoiceDate(b) || "").localeCompare(String(invoiceDate(a) || ""));
+      if (dateCompare) return dateCompare;
+      return String(b.number || "").localeCompare(String(a.number || ""));
+    });
+  return [
+    `<option value="">Attach saved invoice</option>`,
+    ...invoices.map((invoice) => {
+      const sameDay = invoiceDate(invoice) === routeDay ? "today" : formatDate(invoiceDate(invoice));
+      const label = [invoice.customer || "Invoice", invoice.number ? `#${invoice.number}` : "", money.format(invoiceTotal(invoice)), sameDay].filter(Boolean).join(" - ");
+      return `<option value="${escapeAttribute(invoice.id)}" ${invoice.id === selectedInvoiceId ? "selected" : ""}>${escapeHtml(label)}</option>`;
+    })
+  ].join("");
+}
+
 function storeOptionsHtml(selectedId = "") {
   return [
     `<option value="">Select store</option>`,
@@ -1426,6 +1445,7 @@ function renderRouteDeliverySlots() {
     const hasInvoice = scanHasInvoice(scan);
     const storeNotes = scan?.storeNotes || selectedStore?.specialInstructions || "";
     const stopNoteValue = scan?.routeNote || "";
+    const selectedInvoiceId = scan?.savedInvoiceId || "";
     const scanStatus = scan
       ? [scanLabel(scan), scan.number ? "invoice attached" : "no invoice attached", scanLisaHandled(scan) ? "Ordered by office" : "Salesman order", scanDelivered(scan) ? "Delivered" : "Not delivered"].filter(Boolean).join(" - ")
       : selectedStore ? "Store selected - no invoice attached yet." : "Select the store, then attach this stop's invoice.";
@@ -1445,6 +1465,10 @@ function renderRouteDeliverySlots() {
         Attach invoice
         <input data-route-slot-file="${slot}" accept="image/*,application/pdf" type="file">
       </label>
+      <div class="route-slot-attach">
+        <select data-route-slot-invoice="${slot}" aria-label="Attach saved invoice to delivery spot ${slot}">${invoiceOptionsHtml(selectedInvoiceId)}</select>
+        <button class="secondary-button compact-slot-button" data-attach-route-invoice="${slot}" type="button">Attach</button>
+      </div>
       ${scan ? `<label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${scan.id}" type="checkbox" ${scanDelivered(scan) ? "checked" : ""}> Delivered</label>` : ""}
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
       ${scan ? `
@@ -2710,6 +2734,14 @@ function saveAndPrintInvoice() {
   printInvoice(invoice);
 }
 
+function saveInvoiceToDevice() {
+  if (!els.invoiceForm.reportValidity()) return;
+  if (!validateRequiredOrderFields()) return;
+  const invoice = saveInvoice({ keepForm: true });
+  if (!invoice) return;
+  downloadInvoice(invoice);
+}
+
 function resetStopForm() {
   els.stopForm.reset();
   els.stopId.value = "";
@@ -2814,6 +2846,43 @@ function syncRouteScanFromInvoice(invoice) {
     scan.balanceDue = Number(invoice.balanceDue || invoice.amount || invoice.total || 0);
     scan.paymentsCredits = Number(invoice.paymentsCredits || 0);
   });
+}
+
+function scanFromSavedInvoice(invoice, slot, store = invoiceStore(invoice)) {
+  return {
+    id: crypto.randomUUID(),
+    fileName: "Created in app",
+    customer: invoice.customer || store?.name || "",
+    customerEmail: invoice.customerEmail || store?.email || "",
+    address: invoice.address || store?.address || "",
+    number: invoice.number || "",
+    invoiceDate: invoiceDate(invoice),
+    terms: invoice.terms || "",
+    poNumber: invoice.poNumber || "",
+    charge: invoice.charge || "",
+    cash: invoice.cash || "",
+    rep: invoice.rep || routeRep(),
+    mainPhone: invoice.mainPhone || "",
+    altPhone: invoice.altPhone || "",
+    dt: invoice.dt || "",
+    specialInstructions: invoice.specialInstructions || "",
+    items: invoice.items || [],
+    itemsText: lineItemsToText(invoice.items || []),
+    total: invoiceTotal(invoice),
+    amount: Number(invoice.amount || invoiceTotal(invoice) || 0),
+    balanceDue: invoiceBalance(invoice),
+    paymentsCredits: Number(invoice.paymentsCredits || 0),
+    customerTotalBalance: Number(invoice.customerTotalBalance || 0),
+    rawText: invoiceMessage(invoice),
+    accepted: true,
+    delivered: false,
+    lisaHandled: Boolean(invoice.lisaHandled || store?.orderBlocked),
+    matchedStoreId: store?.id || invoice.matchedStoreId || "",
+    savedInvoiceId: invoice.id,
+    routeOrder: Number(slot),
+    deliverySlot: Number(slot),
+    routeNote: ""
+  };
 }
 
 function upsertStoreFromInvoice(invoice) {
@@ -3016,6 +3085,7 @@ function attachEvents() {
   els.clearSignature.addEventListener("click", clearSignaturePad);
   els.saveAndPrintInvoice.addEventListener("click", saveAndPrintInvoice);
   els.saveAndShareInvoice.addEventListener("click", saveAndShareInvoice);
+  document.querySelector("#saveInvoiceToDevice")?.addEventListener("click", saveInvoiceToDevice);
   els.addOrderItem.addEventListener("click", addOrderItem);
   els.itemQty.addEventListener("input", updateItemAmount);
   els.itemRate.addEventListener("input", updateItemAmount);
@@ -3061,6 +3131,7 @@ function attachEvents() {
     const emailInvoice = event.target.closest("[data-email-invoice]");
     const officeInvoice = event.target.closest("[data-office-invoice]");
     const shareInvoice = event.target.closest("[data-share-invoice]");
+    const downloadInvoice = event.target.closest("[data-download-invoice]");
     const printInvoice = event.target.closest("[data-print-invoice]");
     const caseButton = event.target.closest("[data-case-key]");
     const storeManagerItem = event.target.closest("[data-store-manager-id]");
@@ -3070,11 +3141,13 @@ function attachEvents() {
     const deleteReceipt = event.target.closest("[data-delete-receipt]");
     const deleteProspect = event.target.closest("[data-delete-prospect]");
     const clearRouteSlot = event.target.closest("[data-clear-route-slot]");
+    const attachRouteInvoice = event.target.closest("[data-attach-route-invoice]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
     if (deleteInvoice) deleteInvoiceById(deleteInvoice.dataset.deleteInvoice);
     if (emailInvoice) emailInvoiceById(emailInvoice.dataset.emailInvoice);
     if (officeInvoice) emailOfficeById(officeInvoice.dataset.officeInvoice);
     if (shareInvoice) shareInvoiceById(shareInvoice.dataset.shareInvoice);
+    if (downloadInvoice) downloadInvoiceById(downloadInvoice.dataset.downloadInvoice);
     if (printInvoice) printInvoiceById(printInvoice.dataset.printInvoice);
     if (caseButton) adjustStoreProductQty(caseButton);
     if (applyStoreGeo) {
@@ -3089,6 +3162,10 @@ function attachEvents() {
     if (productManagerItem) editProductManager(productManagerItem.dataset.productManagerKey);
     if (clearRouteSlot) {
       clearRouteDeliverySlot(clearRouteSlot.dataset.clearRouteSlot);
+      return;
+    }
+    if (attachRouteInvoice) {
+      attachSavedInvoiceToRouteSlot(attachRouteInvoice.dataset.attachRouteInvoice);
       return;
     }
     if (deleteReceipt) {
@@ -3276,6 +3353,13 @@ async function shareInvoiceById(id) {
   alert("Invoice text copied. You can paste it into a text, email, or note.");
 }
 
+function downloadInvoiceById(id) {
+  const invoice = state.invoices.find((item) => item.id === id);
+  if (!invoice) return;
+  if (invoiceBlocksOrders(invoice) && blockOrderAction(invoiceStore(invoice))) return;
+  downloadInvoice(invoice);
+}
+
 function printInvoiceById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
   if (!invoice) return;
@@ -3293,6 +3377,46 @@ function printInvoice(invoice) {
   win.document.close();
   win.focus();
   win.print();
+}
+
+function downloadInvoice(invoice) {
+  const blob = new Blob([printableInvoiceHtml(invoice)], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const safeName = String(invoice.customer || "andoro-invoice").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "andoro-invoice";
+  const safeNumber = String(invoice.number || todayOffset(0)).replace(/[^a-z0-9-]+/gi, "-");
+  link.href = url;
+  link.download = `${safeName}-${safeNumber}.html`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function attachSavedInvoiceToRouteSlot(slot) {
+  const slotRecord = routeDeliverySlot(slot);
+  const select = document.querySelector(`[data-route-slot-invoice="${slot}"]`);
+  const invoice = (state.invoices || []).find((item) => item.id === select?.value);
+  if (!slotRecord || !invoice) {
+    alert("Choose a saved invoice to attach first.");
+    return;
+  }
+  const oldScanId = slotRecord.scanId || "";
+  const store = (state.stores || []).find((item) => item.id === slotRecord.storeId)
+    || invoiceStore(invoice)
+    || matchingStoreForInvoice(invoice);
+  const scan = scanFromSavedInvoice(invoice, slot, store);
+  if (store) {
+    applyStoreToScan(scan, store);
+    slotRecord.storeId = store.id;
+  }
+  assignScanToRouteSlot(scan, slot);
+  state.scans = state.scans || [];
+  if (oldScanId) state.scans = state.scans.filter((item) => item.id !== oldScanId);
+  state.scans.push(scan);
+  saveState();
+  renderScans();
+  els.routeDayStatus.textContent = `Delivery spot ${slot} attached to invoice ${invoice.number || ""}.`;
 }
 
 function officeRecipients() {

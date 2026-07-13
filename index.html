@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "57";
+        const currentVersion = "58";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v57")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v58")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=57">
+    <link rel="stylesheet" href="styles.css?v=58">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -436,6 +436,7 @@
               </div>
               <div class="button-row">
                 <button class="primary-button" id="saveInvoiceButton" type="submit">Save invoice</button>
+                <button class="secondary-button" id="saveInvoiceToDevice" type="button">Save to device</button>
                 <button class="secondary-button" id="saveAndPrintInvoice" type="button">Print customer copy</button>
                 <button class="secondary-button" id="saveAndShareInvoice" type="button">Send to Office</button>
               </div>
@@ -751,7 +752,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="app.js?v=57"></script>
+    <script src="app.js?v=58"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
