@@ -1526,7 +1526,6 @@ function renderRouteDeliverySlots() {
         <button class="secondary-button compact-slot-button" data-attach-route-invoice="${slot}" type="button">Attach</button>
       </div>
       ${selectedStore ? `<button class="secondary-button compact-slot-button route-manual-invoice-button" data-add-manual-route-invoice="${slot}" type="button">Add manual invoice</button>` : ""}
-      ${scans.length === 1 ? `<label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${scan.id}" type="checkbox" ${scanDelivered(scan) ? "checked" : ""}> Delivered</label>` : ""}
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
       <div class="route-slot-move">
         <button class="ghost-button compact-slot-button" data-route-slot-up="${slot}" type="button">Up</button>
@@ -1538,7 +1537,7 @@ function renderRouteDeliverySlots() {
             <div class="field-row route-slot-invoice-line">
               <label>Invoice ${invoiceIndex + 1} #<input data-scan-field="number" data-scan-id="${item.id}" value="${escapeAttribute(item.number || "")}" placeholder="Invoice number"></label>
               <label>Invoice ${invoiceIndex + 1} total<input data-scan-field="total" data-scan-id="${item.id}" type="number" step="0.01" value="${Number(item.total || item.amount || item.balanceDue || 0) || ""}" placeholder="0.00"></label>
-              <label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${item.id}" type="checkbox" ${scanDelivered(item) ? "checked" : ""}> Delivered</label>
+              <label class="checkbox-label route-delivered-toggle route-delivered-summary-toggle"><input data-scan-delivered="${item.id}" type="checkbox" ${scanDelivered(item) ? "checked" : ""}> Delivered - count in summary</label>
             </div>
           `).join("")}
           ${storeNotes ? `<div class="store-note-box"><strong>Store notes</strong><span>${escapeHtml(storeNotes)}</span></div>` : ""}

@@ -880,6 +880,21 @@ th {
   padding: 8px;
 }
 
+.route-slot-invoice-line .route-delivered-summary-toggle {
+  grid-column: 1 / -1;
+  border: 2px solid var(--red);
+  border-radius: 8px;
+  background: #fff3f3;
+  color: #111;
+  justify-content: center;
+  min-height: 46px;
+}
+
+.route-slot-invoice-line .route-delivered-summary-toggle input {
+  width: 22px;
+  height: 22px;
+}
+
 .store-note-box {
   border: 1px solid #d7c4a3;
   border-radius: 8px;
