@@ -1418,7 +1418,7 @@ function routeSlotScans() {
   const scans = state.scans || [];
   const seen = new Set();
   return routeDeliverySlots()
-    .flatMap((slot) => routeSlotScanIds(slot).map((id) => scans.find((scan) => scan.id === id)))
+    .flatMap((slot) => routeScansForSlot(slot))
     .filter((scan) => {
       if (!scan || scan.accepted === false || seen.has(scan.id)) return false;
       seen.add(scan.id);
@@ -1426,10 +1426,25 @@ function routeSlotScans() {
     });
 }
 
+function routeScansForSlot(slotRecord = {}) {
+  const slotNumber = Number(slotRecord.slot);
+  const scans = state.scans || [];
+  const byId = routeSlotScanIds(slotRecord)
+    .map((id) => scans.find((scan) => scan.id === id))
+    .filter(Boolean);
+  const byRouteOrder = scans.filter((scan) => Number(scan.routeOrder) === slotNumber);
+  const seen = new Set();
+  return [...byId, ...byRouteOrder].filter((scan) => {
+    if (!scan || seen.has(scan.id)) return false;
+    seen.add(scan.id);
+    return true;
+  });
+}
+
 function routeSlotPrimaryScans() {
   const scans = state.scans || [];
   return routeDeliverySlots()
-    .map((slot) => routeSlotScanIds(slot).map((id) => scans.find((scan) => scan.id === id)).find(Boolean))
+    .map((slot) => routeScansForSlot(slot).find(Boolean))
     .filter((scan) => scan && scan.accepted !== false);
 }
 
@@ -1475,7 +1490,7 @@ function renderRouteDeliverySlots() {
   els.routeDeliverySlots.replaceChildren();
   for (const slotRecord of slots) {
     const slot = Number(slotRecord.slot);
-    const scans = routeSlotScanIds(slotRecord).map((id) => (state.scans || []).find((item) => item.id === id)).filter(Boolean);
+    const scans = routeScansForSlot(slotRecord);
     const assignedScan = assigned.get(slot);
     if (!scans.length && assignedScan) scans.push(assignedScan);
     const scan = scans[0];
@@ -2022,7 +2037,6 @@ function routeSummaryHtml() {
     const invoice = routeInvoiceForScan(scan);
     const invoiceNumber = invoice?.number || scan.number || "";
     const stopInvoiceTotal = scanDelivered(scan) && scanHasInvoice(scan) ? routeInvoiceTotalForScan(scan) : 0;
-    const stopPieces = pieceCount(invoice?.items || scan.items || lineItemsFromText(scan.itemsText || ""));
     return `
       <tr>
         <td>${index + 1}</td>
@@ -2031,7 +2045,6 @@ function routeSummaryHtml() {
           <span>${escapeHtml(scan.address || "")}</span>
         </td>
         <td>${escapeHtml(invoiceNumber)}</td>
-        <td class="money">${stopPieces || ""}</td>
         <td>${scanLisaHandled(scan) ? "Office" : "Salesman"}</td>
         <td>${scanDelivered(scan) ? "Yes" : "No"}</td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
@@ -2054,7 +2067,7 @@ function routeSummaryHtml() {
     .meta { text-align: right; line-height: 1.5; font-weight: 700; }
     .total { margin: 18px 0; padding: 14px; border: 2px solid #176b4d; display: flex; justify-content: space-between; font-size: 22px; font-weight: 900; }
     h2 { margin: 22px 0 8px; font-size: 18px; color: #0d3326; }
-    .notes { border: 1px solid #176b4d; padding: 10px; min-height: 56px; line-height: 1.45; }
+    .notes { border: 1px solid #176b4d; padding: 12px; min-height: 86px; line-height: 1.5; }
     table { width: 100%; border-collapse: collapse; }
     th { background: #b9d6c4; color: #0d3326; text-align: left; }
     th, td { border: 1px solid #176b4d; padding: 8px; vertical-align: top; }
@@ -2068,6 +2081,7 @@ function routeSummaryHtml() {
       h1 { font-size: 24px; }
       h2 { margin: 14px 0 6px; font-size: 15px; }
       .total { margin: 12px 0; padding: 10px; font-size: 18px; }
+      .notes { min-height: 92px; }
       th, td { padding: 5px; font-size: 10.5px; }
       tr { break-inside: avoid; page-break-inside: avoid; }
     }
@@ -2095,8 +2109,8 @@ function routeSummaryHtml() {
     <section class="notes">${escapeHtml(state.routeDay?.notes || "No general day notes.").replace(/\n/g, "<br>")}</section>
     <h2>Today's Route</h2>
     <table>
-      <thead><tr><th>Order</th><th>Store</th><th>Invoice #</th><th>Pieces</th><th>Handled By</th><th>Delivered</th><th>Invoice Total</th><th>Notes</th></tr></thead>
-      <tbody>${stopRows || `<tr><td colspan="8">No route stops loaded.</td></tr>`}</tbody>
+      <thead><tr><th>Order</th><th>Store</th><th>Invoice #</th><th>Handled By</th><th>Delivered</th><th>Invoice Total</th><th>Notes</th></tr></thead>
+      <tbody>${stopRows || `<tr><td colspan="7">No route stops loaded.</td></tr>`}</tbody>
     </table>
     <h2>Gas / Expense Receipts</h2>
     <table>
@@ -4528,7 +4542,7 @@ async function buildRouteFromDeliverySlots() {
   const slots = routeDeliverySlots();
   const filledSlots = slots
     .map((slot) => {
-      const scans = routeSlotScanIds(slot).map((scanId) => (state.scans || []).find((scan) => scan.id === scanId)).filter(Boolean);
+      const scans = routeScansForSlot(slot);
       return {
         slot,
         store: (state.stores || []).find((store) => store.id === slot.storeId),

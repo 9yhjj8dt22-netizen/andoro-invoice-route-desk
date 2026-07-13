@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v62 route summary numbers each invoice row separately.
+Current live app version: v63 route summary finds all invoices per stop and removes piece count.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
