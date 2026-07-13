@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v67 route summary prints and totals only real delivered invoice rows.
+Current live app version: v68 route summary syncs visible invoice rows before printing.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

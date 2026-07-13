@@ -2034,6 +2034,18 @@ function syncRouteInvoiceLineFields(target, scan) {
   });
 }
 
+function syncAllRouteInvoiceLineFields() {
+  document.querySelectorAll(".route-slot-invoice-line").forEach((line) => {
+    const delivered = line.querySelector("[data-scan-delivered]");
+    const scan = (state.scans || []).find((item) => item.id === delivered?.dataset.scanDelivered);
+    if (!scan) return;
+    syncRouteInvoiceLineFields(delivered, scan);
+    scan.delivered = delivered.checked;
+    scan.accepted = true;
+  });
+  saveState();
+}
+
 function routeSummaryInvoiceScans() {
   return routeSlotScans().filter((scan) => {
     if (!scanDelivered(scan)) return false;
@@ -3137,6 +3149,7 @@ function clearRouteDay() {
 }
 
 function printRouteSummary() {
+  syncAllRouteInvoiceLineFields();
   const win = window.open("", "_blank");
   if (!win) {
     alert("Pop-up blocking kept the route summary from opening.");
