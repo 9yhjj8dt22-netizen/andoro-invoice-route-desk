@@ -494,10 +494,14 @@ function normalizeRouteDeliverySlots(slots = []) {
   return Array.from({ length: ROUTE_SLOT_COUNT }, (_, index) => {
     const slotNumber = index + 1;
     const existing = bySlot.get(slotNumber) || {};
+    const scanIds = Array.isArray(existing.scanIds)
+      ? existing.scanIds.filter(Boolean)
+      : [existing.scanId].filter(Boolean);
     return {
       slot: slotNumber,
       storeId: existing.storeId || "",
-      scanId: existing.scanId || ""
+      scanId: scanIds[0] || "",
+      scanIds
     };
   });
 }
@@ -513,6 +517,19 @@ function routeDeliverySlots() {
 
 function routeDeliverySlot(slotNumber) {
   return routeDeliverySlots().find((slot) => Number(slot.slot) === Number(slotNumber));
+}
+
+function routeSlotScanIds(slotRecord = {}) {
+  const ids = Array.isArray(slotRecord.scanIds) ? slotRecord.scanIds : [];
+  if (slotRecord.scanId && !ids.includes(slotRecord.scanId)) ids.unshift(slotRecord.scanId);
+  return [...new Set(ids.filter(Boolean))];
+}
+
+function setRouteSlotScanIds(slotRecord, ids = []) {
+  if (!slotRecord) return;
+  const cleanIds = [...new Set(ids.filter(Boolean))];
+  slotRecord.scanIds = cleanIds;
+  slotRecord.scanId = cleanIds[0] || "";
 }
 
 function isDemoInvoice(invoice) {
@@ -1401,12 +1418,19 @@ function routeSlotScans() {
   const scans = state.scans || [];
   const seen = new Set();
   return routeDeliverySlots()
-    .map((slot) => scans.find((scan) => scan.id === slot.scanId))
+    .flatMap((slot) => routeSlotScanIds(slot).map((id) => scans.find((scan) => scan.id === id)))
     .filter((scan) => {
       if (!scan || scan.accepted === false || seen.has(scan.id)) return false;
       seen.add(scan.id);
       return true;
     });
+}
+
+function routeSlotPrimaryScans() {
+  const scans = state.scans || [];
+  return routeDeliverySlots()
+    .map((slot) => routeSlotScanIds(slot).map((id) => scans.find((scan) => scan.id === id)).find(Boolean))
+    .filter((scan) => scan && scan.accepted !== false);
 }
 
 function scanLabel(scan = {}) {
@@ -1451,15 +1475,18 @@ function renderRouteDeliverySlots() {
   els.routeDeliverySlots.replaceChildren();
   for (const slotRecord of slots) {
     const slot = Number(slotRecord.slot);
-    const scan = (state.scans || []).find((item) => item.id === slotRecord.scanId) || assigned.get(slot);
+    const scans = routeSlotScanIds(slotRecord).map((id) => (state.scans || []).find((item) => item.id === id)).filter(Boolean);
+    const assignedScan = assigned.get(slot);
+    if (!scans.length && assignedScan) scans.push(assignedScan);
+    const scan = scans[0];
     const selectedStoreId = slotRecord.storeId || scan?.matchedStoreId || "";
     const selectedStore = (state.stores || []).find((store) => store.id === selectedStoreId);
-    const hasInvoice = scanHasInvoice(scan);
+    const hasInvoice = scans.some(scanHasInvoice);
     const storeNotes = scan?.storeNotes || selectedStore?.specialInstructions || "";
     const stopNoteValue = scan?.routeNote || "";
     const selectedInvoiceId = scan?.savedInvoiceId || "";
     const scanStatus = scan
-      ? [scanLabel(scan), scan.number ? "invoice attached" : "no invoice attached", scanLisaHandled(scan) ? "Ordered by office" : "Salesman order", scanDelivered(scan) ? "Delivered" : "Not delivered"].filter(Boolean).join(" - ")
+      ? [`${scans.length} invoice${scans.length === 1 ? "" : "s"}`, scans.map((item) => item.number ? `#${item.number}` : scanLabel(item)).join(", "), scans.some(scanLisaHandled) ? "Ordered by office" : "Salesman order", scans.every(scanDelivered) ? "Delivered" : "Not delivered"].filter(Boolean).join(" - ")
       : selectedStore ? "Store selected - no invoice attached yet." : "Select the store, then attach this stop's invoice.";
     const row = document.createElement("article");
     const officeOrdered = scan ? scanLisaHandled(scan) : Boolean(selectedStore?.orderBlocked);
@@ -1483,18 +1510,21 @@ function renderRouteDeliverySlots() {
         <select data-route-slot-invoice="${slot}" aria-label="Attach saved invoice to delivery spot ${slot}">${invoiceOptionsHtml(selectedInvoiceId)}</select>
         <button class="secondary-button compact-slot-button" data-attach-route-invoice="${slot}" type="button">Attach</button>
       </div>
-      ${scan ? `<label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${scan.id}" type="checkbox" ${scanDelivered(scan) ? "checked" : ""}> Delivered</label>` : ""}
+      ${scans.length === 1 ? `<label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${scan.id}" type="checkbox" ${scanDelivered(scan) ? "checked" : ""}> Delivered</label>` : ""}
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
       <div class="route-slot-move">
         <button class="ghost-button compact-slot-button" data-route-slot-up="${slot}" type="button">Up</button>
         <button class="ghost-button compact-slot-button" data-route-slot-down="${slot}" type="button">Down</button>
       </div>
-      ${scan ? `
+      ${scans.length ? `
         <div class="route-slot-notes">
-          <div class="field-row">
-            <label>Invoice #<input data-scan-field="number" data-scan-id="${scan.id}" value="${escapeAttribute(scan.number || "")}" placeholder="Invoice number"></label>
-            <label>Invoice total<input data-scan-field="total" data-scan-id="${scan.id}" type="number" step="0.01" value="${Number(scan.total || scan.amount || scan.balanceDue || 0) || ""}" placeholder="0.00"></label>
-          </div>
+          ${scans.map((item, invoiceIndex) => `
+            <div class="field-row route-slot-invoice-line">
+              <label>Invoice ${invoiceIndex + 1} #<input data-scan-field="number" data-scan-id="${item.id}" value="${escapeAttribute(item.number || "")}" placeholder="Invoice number"></label>
+              <label>Invoice ${invoiceIndex + 1} total<input data-scan-field="total" data-scan-id="${item.id}" type="number" step="0.01" value="${Number(item.total || item.amount || item.balanceDue || 0) || ""}" placeholder="0.00"></label>
+              <label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${item.id}" type="checkbox" ${scanDelivered(item) ? "checked" : ""}> Delivered</label>
+            </div>
+          `).join("")}
           ${storeNotes ? `<div class="store-note-box"><strong>Store notes</strong><span>${escapeHtml(storeNotes)}</span></div>` : ""}
           <label>Stop notes<textarea data-scan-field="routeNote" data-scan-id="${scan.id}" rows="2" placeholder="Anything that happened at this stop">${escapeHtml(stopNoteValue)}</textarea></label>
         </div>
@@ -1507,7 +1537,7 @@ function renderRouteDeliverySlots() {
 function renderRouteDayStatus() {
   const prospectsWithAddress = (state.routeDay?.prospects || []).filter((prospect) => prospect.address);
   const stops = [
-    ...routeSlotScans().filter((scan) => scan.address).map((scan) => ({
+    ...routeSlotPrimaryScans().filter((scan) => scan.address).map((scan) => ({
       name: scan.customer || "Stop",
       address: scan.address
     })),
@@ -3375,8 +3405,11 @@ function deleteInvoiceById(id) {
     }
   });
   routeDeliverySlots().forEach((slot) => {
-    const scan = (state.scans || []).find((item) => item.id === slot.scanId);
-    if (scan?.savedInvoiceId === id || (!scan && slot.scanId)) slot.scanId = "";
+    const keptIds = routeSlotScanIds(slot).filter((scanId) => {
+      const scan = (state.scans || []).find((item) => item.id === scanId);
+      return scan && scan.savedInvoiceId !== id;
+    });
+    setRouteSlotScanIds(slot, keptIds);
   });
   saveState();
   render();
@@ -3462,10 +3495,16 @@ function attachSavedInvoiceToRouteSlot(slot) {
     alert("Choose a saved invoice to attach first.");
     return;
   }
-  const oldScanId = slotRecord.scanId || "";
   const store = (state.stores || []).find((item) => item.id === slotRecord.storeId)
     || invoiceStore(invoice)
     || matchingStoreForInvoice(invoice);
+  const existingScan = routeSlotScanIds(slotRecord)
+    .map((scanId) => (state.scans || []).find((item) => item.id === scanId))
+    .find((scan) => scan?.savedInvoiceId === invoice.id);
+  if (existingScan) {
+    alert("That invoice is already attached to this stop.");
+    return;
+  }
   const scan = scanFromSavedInvoice(invoice, slot, store);
   if (store) {
     applyStoreToScan(scan, store);
@@ -3473,7 +3512,6 @@ function attachSavedInvoiceToRouteSlot(slot) {
   }
   assignScanToRouteSlot(scan, slot);
   state.scans = state.scans || [];
-  if (oldScanId) state.scans = state.scans.filter((item) => item.id !== oldScanId);
   state.scans.push(scan);
   saveState();
   renderScans();
@@ -4158,13 +4196,10 @@ async function processPhotos() {
 
 function assignScanToRouteSlot(scan, slot) {
   const slotNumber = Math.max(1, Math.min(ROUTE_SLOT_COUNT, Number(slot) || 1));
-  (state.scans || []).forEach((item) => {
-    if (item.id !== scan.id && Number(item.routeOrder) === slotNumber) item.routeOrder = "";
-  });
   scan.routeOrder = slotNumber;
   scan.deliverySlot = slotNumber;
   const slotRecord = routeDeliverySlot(slotNumber);
-  if (slotRecord) slotRecord.scanId = scan.id;
+  if (slotRecord) setRouteSlotScanIds(slotRecord, [...routeSlotScanIds(slotRecord), scan.id]);
 }
 
 function placeholderScanForStore(store, slot) {
@@ -4207,6 +4242,8 @@ function routeStopFromEntry(entry) {
   return {
     id: scan.id,
     scan,
+    scans: entry.scans || [scan].filter(Boolean),
+    scanIds: (entry.scans || [scan]).map((item) => item.id).filter(Boolean),
     store,
     name: scan.customer || store.name || "Route stop",
     address: scan.address || store.address || "",
@@ -4229,6 +4266,10 @@ async function geocodeRouteStops(stops = []) {
         stop.lng = coords.lng;
         stop.scan.lat = coords.lat;
         stop.scan.lng = coords.lng;
+        (stop.scans || []).forEach((scan) => {
+          scan.lat = coords.lat;
+          scan.lng = coords.lng;
+        });
         if (stop.store?.id) {
           stop.store.lat = coords.lat;
           stop.store.lng = coords.lng;
@@ -4258,7 +4299,7 @@ async function geocodeAddress(address = "", name = "") {
 function applyOptimizedRouteStops(stops = []) {
   const slots = routeDeliverySlots();
   slots.forEach((slot) => {
-    slot.scanId = "";
+    setRouteSlotScanIds(slot, []);
     slot.storeId = "";
   });
   stops.forEach((stop, index) => {
@@ -4267,19 +4308,22 @@ function applyOptimizedRouteStops(stops = []) {
     stop.scan.deliverySlot = slotNumber;
     const slot = slots[index];
     if (slot) {
-      slot.scanId = stop.scan.id;
+      setRouteSlotScanIds(slot, stop.scanIds?.length ? stop.scanIds : [stop.scan.id]);
       slot.storeId = stop.store?.id || stop.scan.matchedStoreId || "";
     }
   });
+  syncRouteOrdersFromSlots();
 }
 
 function syncRouteOrdersFromSlots() {
   routeDeliverySlots().forEach((slotRecord) => {
-    const scan = (state.scans || []).find((item) => item.id === slotRecord.scanId);
-    if (!scan) return;
-    scan.routeOrder = Number(slotRecord.slot);
-    scan.deliverySlot = Number(slotRecord.slot);
-    if (slotRecord.storeId) scan.matchedStoreId = slotRecord.storeId;
+    routeSlotScanIds(slotRecord).forEach((scanId) => {
+      const scan = (state.scans || []).find((item) => item.id === scanId);
+      if (!scan) return;
+      scan.routeOrder = Number(slotRecord.slot);
+      scan.deliverySlot = Number(slotRecord.slot);
+      if (slotRecord.storeId) scan.matchedStoreId = slotRecord.storeId;
+    });
   });
 }
 
@@ -4288,15 +4332,15 @@ function moveRouteSlot(fromSlot, toSlot) {
   const to = Number(toSlot);
   if (!from || !to || from === to || from < 1 || to < 1 || from > ROUTE_SLOT_COUNT || to > ROUTE_SLOT_COUNT) return;
   const slots = routeDeliverySlots();
-  const records = slots.map((slot) => ({ storeId: slot.storeId || "", scanId: slot.scanId || "" }));
+  const records = slots.map((slot) => ({ storeId: slot.storeId || "", scanIds: routeSlotScanIds(slot) }));
   const [moved] = records.splice(from - 1, 1);
   records.splice(to - 1, 0, moved);
   slots.forEach((slot, index) => {
     slot.storeId = records[index]?.storeId || "";
-    slot.scanId = records[index]?.scanId || "";
+    setRouteSlotScanIds(slot, records[index]?.scanIds || []);
   });
   syncRouteOrdersFromSlots();
-  state.stops = routeSlotScans().filter((scan) => scan.address).map((scan) => ({
+  state.stops = routeSlotPrimaryScans().filter((scan) => scan.address).map((scan) => ({
     id: scan.id,
     name: scan.customer || "Stop",
     address: scan.address || "",
@@ -4313,7 +4357,6 @@ function moveRouteSlot(fromSlot, toSlot) {
 async function processRouteSlotFile(file, slot) {
   if (!file) return;
   const slotRecord = routeDeliverySlot(slot);
-  const oldScanId = slotRecord?.scanId || "";
   const store = (state.stores || []).find((item) => item.id === slotRecord?.storeId);
   if (!store) {
     alert("Select the store for this delivery spot before attaching the invoice.");
@@ -4339,7 +4382,6 @@ async function processRouteSlotFile(file, slot) {
   applyStoreToScan(scan, store);
   assignScanToRouteSlot(scan, slot);
   state.scans = state.scans || [];
-  if (oldScanId) state.scans = state.scans.filter((item) => item.id !== oldScanId);
   state.scans.push(scan);
   saveState();
   renderScans();
@@ -4350,17 +4392,21 @@ function setRouteSlotStore(slot, storeId) {
   const slotRecord = routeDeliverySlot(slot);
   if (!slotRecord) return;
   slotRecord.storeId = storeId || "";
-  const scan = (state.scans || []).find((item) => item.id === slotRecord.scanId);
   const store = (state.stores || []).find((item) => item.id === storeId);
-  if (scan && store) applyStoreToScan(scan, store);
+  if (store) {
+    routeSlotScanIds(slotRecord).forEach((scanId) => {
+      const scan = (state.scans || []).find((item) => item.id === scanId);
+      if (scan) applyStoreToScan(scan, store);
+    });
+  }
 }
 
 function clearRouteDeliverySlot(slot) {
   const slotRecord = routeDeliverySlot(slot);
   if (!slotRecord) return;
-  const scanId = slotRecord.scanId;
-  slotRecord.scanId = "";
-  if (scanId) state.scans = (state.scans || []).filter((scan) => scan.id !== scanId);
+  const scanIds = routeSlotScanIds(slotRecord);
+  setRouteSlotScanIds(slotRecord, []);
+  if (scanIds.length) state.scans = (state.scans || []).filter((scan) => !scanIds.includes(scan.id));
   (state.scans || []).forEach((scan) => {
     if (Number(scan.routeOrder) === Number(slot)) scan.routeOrder = "";
   });
@@ -4404,7 +4450,7 @@ function clearScans() {
   selectedFiles = [];
   state.scans = [];
   routeDeliverySlots().forEach((slot) => {
-    slot.scanId = "";
+    setRouteSlotScanIds(slot, []);
   });
   els.invoiceFiles.value = "";
   els.invoiceCamera.value = "";
@@ -4481,12 +4527,16 @@ async function buildRouteFromDeliverySlots() {
   els.buildRoute.textContent = "Building...";
   const slots = routeDeliverySlots();
   const filledSlots = slots
-    .map((slot) => ({
-      slot,
-      store: (state.stores || []).find((store) => store.id === slot.storeId),
-      scan: (state.scans || []).find((scan) => scan.id === slot.scanId)
-    }))
-    .filter((entry) => entry.store || entry.scan);
+    .map((slot) => {
+      const scans = routeSlotScanIds(slot).map((scanId) => (state.scans || []).find((scan) => scan.id === scanId)).filter(Boolean);
+      return {
+        slot,
+        store: (state.stores || []).find((store) => store.id === slot.storeId),
+        scan: scans[0],
+        scans
+      };
+    })
+    .filter((entry) => entry.store || entry.scans.length);
   if (!filledSlots.length) {
     alert("Add at least one store to the delivery spots before building the route.");
     els.buildRoute.disabled = false;
@@ -4502,17 +4552,20 @@ async function buildRouteFromDeliverySlots() {
   }
   let missingInvoice = 0;
   filledSlots.forEach((entry) => {
-    if (!entry.scan) {
-      entry.scan = placeholderScanForStore(entry.store, entry.slot.slot);
+    if (!entry.scans.length) {
+      const placeholder = placeholderScanForStore(entry.store, entry.slot.slot);
+      entry.scan = placeholder;
+      entry.scans = [placeholder];
       state.scans = state.scans || [];
-      state.scans.push(entry.scan);
-      missingInvoice += 1;
-    } else if (!scanHasInvoice(entry.scan)) {
-      missingInvoice += 1;
+      state.scans.push(placeholder);
     }
-    applyStoreToScan(entry.scan, entry.store);
-    assignScanToRouteSlot(entry.scan, entry.slot.slot);
-    entry.scan.accepted = true;
+    entry.scans.forEach((scan) => {
+      if (!scanHasInvoice(scan)) missingInvoice += 1;
+      applyStoreToScan(scan, entry.store);
+      assignScanToRouteSlot(scan, entry.slot.slot);
+      scan.accepted = true;
+    });
+    entry.scan = entry.scans[0];
   });
   els.routeDayStatus.textContent = "Finding stop locations and building the most efficient route...";
   const routeStops = filledSlots.map(routeStopFromEntry);
@@ -4547,8 +4600,9 @@ async function buildRouteFromDeliverySlots() {
     priority: stop.priority
   }));
   state.optimizedStopIds = state.stops.map((stop) => stop.id);
-  const invoiceScans = filledSlots.map((entry) => entry.scan).filter((scan) => scanHasInvoice(scan) && scanReadyToSave(scan));
-  const reviewCount = filledSlots.map((entry) => entry.scan).filter((scan) => scanHasInvoice(scan) && !scanReadyToSave(scan)).length;
+  const allSlotScans = filledSlots.flatMap((entry) => entry.scans);
+  const invoiceScans = allSlotScans.filter((scan) => scanHasInvoice(scan) && scanReadyToSave(scan));
+  const reviewCount = allSlotScans.filter((scan) => scanHasInvoice(scan) && !scanReadyToSave(scan)).length;
   const result = invoiceScans.length ? saveScansAsInvoices(invoiceScans) : { saved: 0, lisaCount: 0, skipped: 0 };
   if (!result) {
     els.buildRoute.disabled = false;

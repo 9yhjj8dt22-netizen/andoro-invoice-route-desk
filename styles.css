@@ -872,6 +872,13 @@ th {
   resize: vertical;
 }
 
+.route-slot-invoice-line {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
 .store-note-box {
   border: 1px solid #d7c4a3;
   border-radius: 8px;
