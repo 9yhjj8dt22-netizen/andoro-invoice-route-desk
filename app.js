@@ -2007,8 +2007,7 @@ function matchingInvoiceForRouteScan(scan = {}) {
 }
 
 function routeDayTotal() {
-  return routeSlotScans()
-    .filter(scanDelivered)
+  return routeSummaryInvoiceScans()
     .reduce((sum, scan) => sum + routeInvoiceTotalForScan(scan), 0);
 }
 
@@ -2035,8 +2034,18 @@ function syncRouteInvoiceLineFields(target, scan) {
   });
 }
 
+function routeSummaryInvoiceScans() {
+  return routeSlotScans().filter((scan) => {
+    if (!scanDelivered(scan)) return false;
+    const hasNumber = Boolean(String(scan.number || "").trim());
+    const hasSavedInvoice = Boolean(scan.savedInvoiceId);
+    const hasTotal = routeInvoiceTotalForScan(scan) > 0;
+    return hasNumber || hasSavedInvoice || hasTotal;
+  });
+}
+
 function routeSummaryHtml() {
-  const stops = routeSlotScans();
+  const stops = routeSummaryInvoiceScans();
   const receipts = state.routeDay?.receipts || [];
   const receiptRows = receipts.map((receipt, index) => `
     <tr>
