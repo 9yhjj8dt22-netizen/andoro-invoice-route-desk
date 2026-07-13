@@ -1397,6 +1397,18 @@ function routeScans() {
     });
 }
 
+function routeSlotScans() {
+  const scans = state.scans || [];
+  const seen = new Set();
+  return routeDeliverySlots()
+    .map((slot) => scans.find((scan) => scan.id === slot.scanId))
+    .filter((scan) => {
+      if (!scan || scan.accepted === false || seen.has(scan.id)) return false;
+      seen.add(scan.id);
+      return true;
+    });
+}
+
 function scanLabel(scan = {}) {
   return [scan.customer || "Invoice", scan.number ? `#${scan.number}` : "", scan.fileName || ""].filter(Boolean).join(" - ");
 }
@@ -1452,8 +1464,10 @@ function renderRouteDeliverySlots() {
     const row = document.createElement("article");
     const officeOrdered = scan ? scanLisaHandled(scan) : Boolean(selectedStore?.orderBlocked);
     row.className = `route-slot${scan ? " filled" : ""}${selectedStore ? " store-selected" : ""}${selectedStore && !hasInvoice ? " missing-invoice" : ""}${officeOrdered ? " office-ordered" : ""}`;
+    row.draggable = true;
+    row.dataset.routeSlot = String(slot);
     row.innerHTML = `
-      <strong>${slot}</strong>
+      <strong class="route-slot-handle" title="Drag to reorder">${slot}</strong>
       <div class="route-slot-body">
         <label>
           Store
@@ -1471,6 +1485,10 @@ function renderRouteDeliverySlots() {
       </div>
       ${scan ? `<label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${scan.id}" type="checkbox" ${scanDelivered(scan) ? "checked" : ""}> Delivered</label>` : ""}
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
+      <div class="route-slot-move">
+        <button class="ghost-button compact-slot-button" data-route-slot-up="${slot}" type="button">Up</button>
+        <button class="ghost-button compact-slot-button" data-route-slot-down="${slot}" type="button">Down</button>
+      </div>
       ${scan ? `
         <div class="route-slot-notes">
           <div class="field-row">
@@ -1489,7 +1507,7 @@ function renderRouteDeliverySlots() {
 function renderRouteDayStatus() {
   const prospectsWithAddress = (state.routeDay?.prospects || []).filter((prospect) => prospect.address);
   const stops = [
-    ...routeScans().filter((scan) => scan.address).map((scan) => ({
+    ...routeSlotScans().filter((scan) => scan.address).map((scan) => ({
       name: scan.customer || "Stop",
       address: scan.address
     })),
@@ -1498,11 +1516,11 @@ function renderRouteDayStatus() {
       address: prospect.address
     }))
   ];
-  const orderedCount = routeScans().length;
+  const orderedCount = routeSlotScans().length;
   const prospectCount = state.routeDay?.prospects?.length || 0;
-  const lisaCount = routeScans().filter((scan) => scanLisaHandled(scan)).length;
-  const invoiceCount = routeScans().filter(scanHasInvoice).length;
-  const deliveredCount = routeScans().filter((scan) => scanDelivered(scan)).length;
+  const lisaCount = routeSlotScans().filter((scan) => scanLisaHandled(scan)).length;
+  const invoiceCount = routeSlotScans().filter(scanHasInvoice).length;
+  const deliveredCount = routeSlotScans().filter((scan) => scanDelivered(scan)).length;
   els.routeDayStatus.textContent = orderedCount
     ? `${orderedCount} route stop${orderedCount === 1 ? "" : "s"} loaded, ${invoiceCount} with invoice, ${deliveredCount} delivered, ${lisaCount} ordered by office, ${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`
     : `${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`;
@@ -1909,7 +1927,7 @@ function weakRouteAddresses(stops = []) {
 }
 
 function routeInvoices() {
-  const scans = routeScans();
+  const scans = routeSlotScans();
   const invoices = scans
     .filter(scanDelivered)
     .map((scan) => routeInvoiceForScan(scan))
@@ -1944,22 +1962,22 @@ function matchingInvoiceForRouteScan(scan = {}) {
 }
 
 function routeDayTotal() {
-  return routeScans()
+  return routeSlotScans()
     .filter((scan) => scanDelivered(scan) && scanHasInvoice(scan))
     .reduce((sum, scan) => sum + routeInvoiceTotalForScan(scan), 0);
 }
 
 function routeInvoiceTotalForScan(scan = {}) {
-  const invoice = routeInvoiceForScan(scan);
-  if (invoice) return invoiceTotal(invoice);
   const explicitTotal = Number(scan.total || scan.balanceDue || scan.amount || 0);
   if (Number.isFinite(explicitTotal) && explicitTotal > 0) return explicitTotal;
+  const invoice = routeInvoiceForScan(scan);
+  if (invoice) return invoiceTotal(invoice);
   const itemTotal = lineItemTotal(scan.items || lineItemsFromText(scan.itemsText || ""));
   return Number.isFinite(itemTotal) && itemTotal > 0 ? itemTotal : 0;
 }
 
 function routeSummaryHtml() {
-  const stops = routeScans();
+  const stops = routeSlotScans();
   const receipts = state.routeDay?.receipts || [];
   const receiptRows = receipts.map((receipt, index) => `
     <tr>
@@ -3142,6 +3160,8 @@ function attachEvents() {
     const deleteProspect = event.target.closest("[data-delete-prospect]");
     const clearRouteSlot = event.target.closest("[data-clear-route-slot]");
     const attachRouteInvoice = event.target.closest("[data-attach-route-invoice]");
+    const routeSlotUp = event.target.closest("[data-route-slot-up]");
+    const routeSlotDown = event.target.closest("[data-route-slot-down]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
     if (deleteInvoice) deleteInvoiceById(deleteInvoice.dataset.deleteInvoice);
     if (emailInvoice) emailInvoiceById(emailInvoice.dataset.emailInvoice);
@@ -3168,6 +3188,16 @@ function attachEvents() {
       attachSavedInvoiceToRouteSlot(attachRouteInvoice.dataset.attachRouteInvoice);
       return;
     }
+    if (routeSlotUp) {
+      const slot = Number(routeSlotUp.dataset.routeSlotUp);
+      moveRouteSlot(slot, slot - 1);
+      return;
+    }
+    if (routeSlotDown) {
+      const slot = Number(routeSlotDown.dataset.routeSlotDown);
+      moveRouteSlot(slot, slot + 1);
+      return;
+    }
     if (deleteReceipt) {
       state.routeDay.receipts = (state.routeDay?.receipts || []).filter((receipt) => receipt.id !== deleteReceipt.dataset.deleteReceipt);
       saveState();
@@ -3178,6 +3208,37 @@ function attachEvents() {
       saveState();
       renderRouteDayCapture();
     }
+  });
+
+  document.addEventListener("dragstart", (event) => {
+    const slot = event.target.closest("[data-route-slot]");
+    if (!slot || event.target.matches("input, select, textarea, button")) return;
+    event.dataTransfer?.setData("text/plain", slot.dataset.routeSlot);
+    slot.classList.add("dragging");
+  });
+
+  document.addEventListener("dragover", (event) => {
+    const slot = event.target.closest("[data-route-slot]");
+    if (!slot) return;
+    event.preventDefault();
+    slot.classList.add("drag-over");
+  });
+
+  document.addEventListener("dragleave", (event) => {
+    event.target.closest("[data-route-slot]")?.classList.remove("drag-over");
+  });
+
+  document.addEventListener("drop", (event) => {
+    const slot = event.target.closest("[data-route-slot]");
+    if (!slot) return;
+    event.preventDefault();
+    const fromSlot = event.dataTransfer?.getData("text/plain");
+    document.querySelectorAll(".route-slot.drag-over, .route-slot.dragging").forEach((item) => item.classList.remove("drag-over", "dragging"));
+    moveRouteSlot(fromSlot, slot.dataset.routeSlot);
+  });
+
+  document.addEventListener("dragend", () => {
+    document.querySelectorAll(".route-slot.drag-over, .route-slot.dragging").forEach((item) => item.classList.remove("drag-over", "dragging"));
   });
 
   document.addEventListener("input", (event) => {
@@ -3199,7 +3260,7 @@ function attachEvents() {
       scan[field] = event.target.value;
     }
     saveState();
-    if (field === "routeOrder" || field === "routeNote" || field === "address" || field === "customer") {
+    if (["routeOrder", "routeNote", "address", "customer", "total", "amount", "balanceDue", "itemsText"].includes(field)) {
       if (field === "routeOrder") renderRouteDeliverySlots();
       renderRouteDayStatus();
     }
@@ -4210,6 +4271,43 @@ function applyOptimizedRouteStops(stops = []) {
       slot.storeId = stop.store?.id || stop.scan.matchedStoreId || "";
     }
   });
+}
+
+function syncRouteOrdersFromSlots() {
+  routeDeliverySlots().forEach((slotRecord) => {
+    const scan = (state.scans || []).find((item) => item.id === slotRecord.scanId);
+    if (!scan) return;
+    scan.routeOrder = Number(slotRecord.slot);
+    scan.deliverySlot = Number(slotRecord.slot);
+    if (slotRecord.storeId) scan.matchedStoreId = slotRecord.storeId;
+  });
+}
+
+function moveRouteSlot(fromSlot, toSlot) {
+  const from = Number(fromSlot);
+  const to = Number(toSlot);
+  if (!from || !to || from === to || from < 1 || to < 1 || from > ROUTE_SLOT_COUNT || to > ROUTE_SLOT_COUNT) return;
+  const slots = routeDeliverySlots();
+  const records = slots.map((slot) => ({ storeId: slot.storeId || "", scanId: slot.scanId || "" }));
+  const [moved] = records.splice(from - 1, 1);
+  records.splice(to - 1, 0, moved);
+  slots.forEach((slot, index) => {
+    slot.storeId = records[index]?.storeId || "";
+    slot.scanId = records[index]?.scanId || "";
+  });
+  syncRouteOrdersFromSlots();
+  state.stops = routeSlotScans().filter((scan) => scan.address).map((scan) => ({
+    id: scan.id,
+    name: scan.customer || "Stop",
+    address: scan.address || "",
+    lat: Number(scan.lat || 0),
+    lng: Number(scan.lng || 0),
+    priority: scanHasInvoice(scan) ? "high" : "normal"
+  }));
+  state.optimizedStopIds = state.stops.map((stop) => stop.id);
+  saveState();
+  renderScans();
+  renderRoute();
 }
 
 async function processRouteSlotFile(file, slot) {

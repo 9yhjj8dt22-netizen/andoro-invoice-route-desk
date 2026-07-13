@@ -851,6 +851,13 @@ th {
   align-items: center;
 }
 
+.route-slot-move {
+  grid-column: 2 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .route-slot-attach select {
   min-width: 190px;
   flex: 1 1 190px;
@@ -901,6 +908,15 @@ th {
   box-shadow: inset 4px 0 0 #c82424;
 }
 
+.route-slot.dragging {
+  opacity: 0.55;
+}
+
+.route-slot.drag-over {
+  outline: 3px solid var(--red);
+  outline-offset: 2px;
+}
+
 .route-slot > strong {
   width: 34px;
   height: 34px;
@@ -911,6 +927,10 @@ th {
   color: #111;
   border: 2px solid #111;
   font-weight: 900;
+}
+
+.route-slot-handle {
+  cursor: grab;
 }
 
 .route-slot-body {

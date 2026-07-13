@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v59 fixed Today Route attach controls so store selection stays usable.
+Current live app version: v60 route summary totals use visible delivered stops and route stops can be reordered.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
