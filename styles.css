@@ -822,13 +822,20 @@ th {
 
 .route-slot {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto auto auto;
+  grid-template-columns: 42px minmax(0, 1fr);
   gap: 10px;
-  align-items: center;
+  align-items: start;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfdfc;
   padding: 8px;
+}
+
+.route-slot .compact-file-button,
+.route-slot .route-slot-attach,
+.route-slot .route-delivered-toggle,
+.route-slot .compact-slot-button {
+  grid-column: 2 / -1;
 }
 
 .route-slot-notes {
@@ -924,9 +931,7 @@ th {
 .route-slot span {
   color: var(--muted);
   font-size: 0.82rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .compact-file-button {
