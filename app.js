@@ -2025,7 +2025,7 @@ function routeSummaryHtml() {
     const stopPieces = pieceCount(invoice?.items || scan.items || lineItemsFromText(scan.itemsText || ""));
     return `
       <tr>
-        <td>${escapeHtml(scan.routeOrder || index + 1)}</td>
+        <td>${index + 1}</td>
         <td>
           <strong>${escapeHtml(storeName)}</strong>
           <span>${escapeHtml(scan.address || "")}</span>
