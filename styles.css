@@ -833,6 +833,7 @@ th {
 
 .route-slot .compact-file-button,
 .route-slot .route-slot-attach,
+.route-slot .route-manual-invoice-button,
 .route-slot .route-delivered-toggle,
 .route-slot .compact-slot-button {
   grid-column: 2 / -1;

@@ -1525,6 +1525,7 @@ function renderRouteDeliverySlots() {
         <select data-route-slot-invoice="${slot}" aria-label="Attach saved invoice to delivery spot ${slot}">${invoiceOptionsHtml(selectedInvoiceId)}</select>
         <button class="secondary-button compact-slot-button" data-attach-route-invoice="${slot}" type="button">Attach</button>
       </div>
+      ${selectedStore ? `<button class="secondary-button compact-slot-button route-manual-invoice-button" data-add-manual-route-invoice="${slot}" type="button">Add manual invoice</button>` : ""}
       ${scans.length === 1 ? `<label class="checkbox-label route-delivered-toggle"><input data-scan-delivered="${scan.id}" type="checkbox" ${scanDelivered(scan) ? "checked" : ""}> Delivered</label>` : ""}
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
       <div class="route-slot-move">
@@ -3204,6 +3205,7 @@ function attachEvents() {
     const deleteProspect = event.target.closest("[data-delete-prospect]");
     const clearRouteSlot = event.target.closest("[data-clear-route-slot]");
     const attachRouteInvoice = event.target.closest("[data-attach-route-invoice]");
+    const addManualRouteInvoice = event.target.closest("[data-add-manual-route-invoice]");
     const routeSlotUp = event.target.closest("[data-route-slot-up]");
     const routeSlotDown = event.target.closest("[data-route-slot-down]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
@@ -3230,6 +3232,10 @@ function attachEvents() {
     }
     if (attachRouteInvoice) {
       attachSavedInvoiceToRouteSlot(attachRouteInvoice.dataset.attachRouteInvoice);
+      return;
+    }
+    if (addManualRouteInvoice) {
+      addManualInvoiceToRouteSlot(addManualRouteInvoice.dataset.addManualRouteInvoice);
       return;
     }
     if (routeSlotUp) {
@@ -3530,6 +3536,24 @@ function attachSavedInvoiceToRouteSlot(slot) {
   saveState();
   renderScans();
   els.routeDayStatus.textContent = `Delivery spot ${slot} attached to invoice ${invoice.number || ""}.`;
+}
+
+function addManualInvoiceToRouteSlot(slot) {
+  const slotRecord = routeDeliverySlot(slot);
+  const store = (state.stores || []).find((item) => item.id === slotRecord?.storeId);
+  if (!slotRecord || !store) {
+    alert("Select the store for this delivery spot first.");
+    return;
+  }
+  const scan = placeholderScanForStore(store, slot);
+  scan.fileName = "Manual invoice";
+  scan.accepted = true;
+  state.scans = state.scans || [];
+  state.scans.push(scan);
+  assignScanToRouteSlot(scan, slot);
+  saveState();
+  renderScans();
+  els.routeDayStatus.textContent = `Manual invoice row added to delivery spot ${slot}.`;
 }
 
 function officeRecipients() {
@@ -4408,6 +4432,13 @@ function setRouteSlotStore(slot, storeId) {
   slotRecord.storeId = storeId || "";
   const store = (state.stores || []).find((item) => item.id === storeId);
   if (store) {
+    if (!routeScansForSlot(slotRecord).length) {
+      const scan = placeholderScanForStore(store, slot);
+      scan.fileName = "Manual invoice";
+      state.scans = state.scans || [];
+      state.scans.push(scan);
+      assignScanToRouteSlot(scan, slot);
+    }
     routeSlotScanIds(slotRecord).forEach((scanId) => {
       const scan = (state.scans || []).find((item) => item.id === scanId);
       if (scan) applyStoreToScan(scan, store);
