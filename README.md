@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v65 Today Route delivered checkbox is prominent on each invoice row.
+Current live app version: v66 delivered route invoices sync row totals before summary calculation.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

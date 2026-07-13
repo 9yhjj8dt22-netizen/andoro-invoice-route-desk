@@ -2008,7 +2008,7 @@ function matchingInvoiceForRouteScan(scan = {}) {
 
 function routeDayTotal() {
   return routeSlotScans()
-    .filter((scan) => scanDelivered(scan) && scanHasInvoice(scan))
+    .filter(scanDelivered)
     .reduce((sum, scan) => sum + routeInvoiceTotalForScan(scan), 0);
 }
 
@@ -2019,6 +2019,20 @@ function routeInvoiceTotalForScan(scan = {}) {
   if (invoice) return invoiceTotal(invoice);
   const itemTotal = lineItemTotal(scan.items || lineItemsFromText(scan.itemsText || ""));
   return Number.isFinite(itemTotal) && itemTotal > 0 ? itemTotal : 0;
+}
+
+function syncRouteInvoiceLineFields(target, scan) {
+  const line = target?.closest?.(".route-slot-invoice-line");
+  if (!line || !scan) return;
+  line.querySelectorAll("[data-scan-field]").forEach((field) => {
+    if (field.dataset.scanId !== scan.id) return;
+    const key = field.dataset.scanField;
+    if (["amount", "customerTotalBalance", "total", "paymentsCredits", "balanceDue", "routeOrder"].includes(key)) {
+      scan[key] = Number(field.value || 0);
+    } else {
+      scan[key] = field.value;
+    }
+  });
 }
 
 function routeSummaryHtml() {
@@ -2036,7 +2050,7 @@ function routeSummaryHtml() {
     const storeName = scan.customer || `Stop ${index + 1}`;
     const invoice = routeInvoiceForScan(scan);
     const invoiceNumber = invoice?.number || scan.number || "";
-    const stopInvoiceTotal = scanDelivered(scan) && scanHasInvoice(scan) ? routeInvoiceTotalForScan(scan) : 0;
+    const stopInvoiceTotal = scanDelivered(scan) ? routeInvoiceTotalForScan(scan) : 0;
     return `
       <tr>
         <td>${index + 1}</td>
@@ -3362,7 +3376,9 @@ function attachEvents() {
     if (deliveredId) {
       const scan = state.scans.find((item) => item.id === deliveredId);
       if (!scan) return;
+      syncRouteInvoiceLineFields(event.target, scan);
       scan.delivered = event.target.checked;
+      scan.accepted = true;
       saveState();
       renderScans();
       renderRouteDayStatus();
