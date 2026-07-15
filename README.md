@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v69 route invoice attachments ask before adding unsaved stores.
+Current live app version: v70 bundled PDF reader for phone and tablet invoice attachments.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
