@@ -1046,6 +1046,29 @@ function approveStoreFromRouteScan(scan = {}) {
     || null;
 }
 
+function reviewRouteScanFields(scan = {}) {
+  const name = prompt("Review store/customer name from invoice:", scan.customer || "");
+  if (name === null) return false;
+  const address = prompt("Review store/customer address from invoice:", scan.address || "");
+  if (address === null) return false;
+  const number = prompt("Review invoice number:", scan.number || "");
+  if (number === null) return false;
+  const total = prompt("Review invoice total:", Number(scan.total || scan.balanceDue || scan.amount || 0) ? Number(scan.total || scan.balanceDue || scan.amount || 0).toFixed(2) : "");
+  if (total === null) return false;
+  scan.customer = name.trim();
+  scan.address = address.trim();
+  scan.number = number.trim();
+  const parsedTotal = Number(String(total).replace(/[$,]/g, ""));
+  if (Number.isFinite(parsedTotal) && parsedTotal >= 0) {
+    scan.total = parsedTotal;
+    scan.amount = parsedTotal;
+    scan.balanceDue = parsedTotal;
+    scan.customerTotalBalance = parsedTotal;
+  }
+  scan.accepted = Boolean(scan.number && (scan.customer || scan.address));
+  return true;
+}
+
 function currentOrderMap() {
   return new Map(nonDeliveryItems(lineItemsFromText(els.lineItemsText.value)).map((item) => [productKey(item), item]));
 }
@@ -1571,6 +1594,8 @@ function renderRouteDeliverySlots() {
         <div class="route-slot-notes">
           ${scans.map((item, invoiceIndex) => `
             <div class="field-row route-slot-invoice-line">
+              <label>Store name<input data-scan-field="customer" data-scan-id="${item.id}" value="${escapeAttribute(item.customer || "")}" placeholder="Store or customer"></label>
+              <label>Address<input data-scan-field="address" data-scan-id="${item.id}" value="${escapeAttribute(item.address || "")}" placeholder="Street, city, state"></label>
               <label>Invoice ${invoiceIndex + 1} #<input data-scan-field="number" data-scan-id="${item.id}" value="${escapeAttribute(item.number || "")}" placeholder="Invoice number"></label>
               <label>Invoice ${invoiceIndex + 1} total<input data-scan-field="total" data-scan-id="${item.id}" type="number" step="0.01" value="${Number(item.total || item.amount || item.balanceDue || 0) || ""}" placeholder="0.00"></label>
               <label class="checkbox-label route-delivered-toggle route-delivered-summary-toggle"><input data-scan-delivered="${item.id}" type="checkbox" ${scanDelivered(item) ? "checked" : ""}> Delivered - count in summary</label>
@@ -1662,19 +1687,21 @@ function renderRouteDayCapture() {
   renderRouteDayStatus();
 }
 
-function parseInvoiceText(rawText, fileName, layout = null) {
+function parseInvoiceText(rawText, fileName, layout = null, zones = null) {
   const text = rawText.replace(/\r/g, "\n");
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const amountMatches = amountsFromText(text);
   const dateMatches = [...text.matchAll(/\b([0-1]?\d[\/\-][0-3]?\d[\/\-](?:20)?\d{2})\b/g)].map((match) => normalizeDate(match[1]));
   const layoutInvoice = parseLayoutInvoice(layout);
-  const invoiceNumber = layoutInvoice.number
+  const zoneInvoice = parseZoneInvoice(zones);
+  const invoiceNumber = zoneInvoice.number
+    || layoutInvoice.number
     || invoiceNumberFromText(text)
     || extractInvoiceNumberFromLine(findValueAfterLabel(lines, /invoice\s*#/i))
     || invoiceNumberNearDate(lines)
     || "";
-  const billTo = layoutInvoice.billTo?.customer ? layoutInvoice.billTo : parseBillTo(lines);
-  const totals = parseTotals(text, amountMatches, layoutInvoice);
+  const billTo = zoneInvoice.billTo?.customer ? zoneInvoice.billTo : layoutInvoice.billTo?.customer ? layoutInvoice.billTo : parseBillTo(lines);
+  const totals = parseTotals(text, amountMatches, { ...layoutInvoice, total: zoneInvoice.total || layoutInvoice.total || 0 });
   const items = parseLineItems(lines);
   const terms = findValueAfterLabel(lines, /^terms$/i) || text.match(/\bNet\s*\d+\b/i)?.[0] || "";
   const rawCustomer = billTo.customer || findCustomer(lines, invoiceNumber);
@@ -1763,6 +1790,47 @@ function parseLayoutInvoice(layout) {
     number: parseLayoutInvoiceNumber(layout),
     total: parseLayoutTotal(layout)
   };
+}
+
+function parseZoneInvoice(zones) {
+  if (!zones) return {};
+  return {
+    billTo: parseZoneBillTo(zones.billTo || ""),
+    number: extractInvoiceNumberFromLine(zones.invoiceBox || ""),
+    total: parseZoneTotal(zones.totalBox || "")
+  };
+}
+
+function parseZoneBillTo(text = "") {
+  const lines = String(text)
+    .replace(/\r/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/^[^A-Z0-9#]+/i, "").trim())
+    .filter(Boolean)
+    .filter((line) => !/^bill\s*to$/i.test(line))
+    .filter((line) => !isCompanyHeaderLine(line))
+    .filter((line) => !/special instructions|invoice|date|terms|description|qty|rate|amount/i.test(line));
+  const normalized = [];
+  lines.forEach((line) => {
+    const cleaned = line.replace(/^bill\s*to[:\s]*/i, "").trim();
+    if (cleaned) normalized.push(cleaned);
+  });
+  const customerIndex = normalized.findIndex((line) => !looksLikeAddressLine(line) && !/\b[A-Z]{2}\s+\d{5}\b/i.test(line));
+  const customer = customerIndex >= 0 ? cleanImportedCustomerName(normalized[customerIndex]) : "";
+  const address = normalized
+    .filter((line, index) => index !== customerIndex)
+    .filter((line) => looksLikeAddressLine(line) || /\b[A-Z]{2}\s+\d{5}\b/i.test(line) || /^c\/o\b/i.test(line))
+    .join(", ");
+  return { customer, address };
+}
+
+function parseZoneTotal(text = "") {
+  const lines = String(text).split("\n").map((line) => line.trim()).filter(Boolean);
+  const balanceLine = lines.find((line) => /balance\s+due/i.test(line));
+  const totalLine = lines.find((line) => /^total\b/i.test(line));
+  const preferred = balanceLine || totalLine;
+  if (preferred) return amountsFromText(preferred).at(-1) || 0;
+  return amountsFromText(lines.join("\n")).at(-1) || 0;
 }
 
 function parseLayoutBillTo(layout) {
@@ -3474,6 +3542,11 @@ function attachEvents() {
     if (!scan) return;
     if (["amount", "customerTotalBalance", "total", "paymentsCredits", "balanceDue", "routeOrder"].includes(field)) {
       scan[field] = Number(event.target.value);
+      if (field === "total") {
+        scan.amount = Number(event.target.value);
+        scan.balanceDue = Number(event.target.value);
+        scan.customerTotalBalance = Number(event.target.value);
+      }
     } else if (field === "itemsText") {
       scan.itemsText = event.target.value;
       scan.items = lineItemsFromText(event.target.value);
@@ -4389,7 +4462,7 @@ async function processPhotos() {
     if (file.type === "application/pdf") {
       const pages = await readPdfInvoice(file);
       pages.forEach((page, pageIndex) => {
-        const scan = parseInvoiceText(page.text, page.fileName, page.layout);
+        const scan = parseInvoiceText(page.text, page.fileName, page.layout, page.zones);
         if (index + pageIndex < ROUTE_SLOT_COUNT) assignScanToRouteSlot(scan, index + pageIndex + 1);
         state.scans.push(scan);
       });
@@ -4581,10 +4654,14 @@ async function processRouteSlotFile(file, slot) {
   let scan;
   if (file.type === "application/pdf") {
     const pages = await readPdfInvoice(file);
-    scan = parseInvoiceText(pages[0]?.text || "", pages[0]?.fileName || file.name, pages[0]?.layout);
+    scan = parseInvoiceText(pages[0]?.text || "", pages[0]?.fileName || file.name, pages[0]?.layout, pages[0]?.zones);
   } else {
     const text = await readImageInvoice(file, file.name);
     scan = parseInvoiceText(text, file.name);
+  }
+  if (!reviewRouteScanFields(scan)) {
+    els.scanStatus.textContent = `Delivery spot ${slot} scan canceled.`;
+    return;
   }
   const store = (state.stores || []).find((item) => item.id === slotRecord?.storeId)
     || approveStoreFromRouteScan(scan);
@@ -4647,7 +4724,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=71";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=72";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
@@ -4662,15 +4739,45 @@ async function readPdfInvoice(file) {
     canvas.height = viewport.height;
     await page.render({ canvasContext: context, viewport }).promise;
     const image = canvas.toDataURL("image/png");
+    const zones = await readInvoiceZonesFromCanvas(canvas, `${file.name} page ${pageNumber}`);
     const text = await readImageInvoice(image, `${file.name} page ${pageNumber}`);
     const nativeText = nativeLayout?.text || "";
     pages.push({
       text: nativeText.length > text.length * 0.4 ? `${nativeText}\n${text}` : text,
       fileName: `${file.name} page ${pageNumber}`,
-      layout: nativeLayout
+      layout: nativeLayout,
+      zones
     });
   }
   return pages;
+}
+
+async function readInvoiceZonesFromCanvas(canvas, label) {
+  const zones = {
+    billTo: { x: 0.08, y: 0.16, w: 0.45, h: 0.15 },
+    invoiceBox: { x: 0.60, y: 0.06, w: 0.36, h: 0.13 },
+    totalBox: { x: 0.62, y: 0.78, w: 0.35, h: 0.14 }
+  };
+  const result = {};
+  for (const [key, zone] of Object.entries(zones)) {
+    const zoneCanvas = cropCanvasZone(canvas, zone);
+    const dataUrl = zoneCanvas.toDataURL("image/png");
+    result[key] = await readImageInvoice(dataUrl, `${label} ${key}`);
+  }
+  return result;
+}
+
+function cropCanvasZone(canvas, zone) {
+  const crop = document.createElement("canvas");
+  const x = Math.max(0, Math.floor(canvas.width * zone.x));
+  const y = Math.max(0, Math.floor(canvas.height * zone.y));
+  const width = Math.min(canvas.width - x, Math.ceil(canvas.width * zone.w));
+  const height = Math.min(canvas.height - y, Math.ceil(canvas.height * zone.h));
+  crop.width = width;
+  crop.height = height;
+  const context = crop.getContext("2d", { willReadFrequently: true });
+  context.drawImage(canvas, x, y, width, height, 0, 0, width, height);
+  return crop;
 }
 
 async function readPdfTextLayout(page) {

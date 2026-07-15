@@ -796,15 +796,16 @@ th {
 
 .route-day-panel {
   margin-bottom: 18px;
+  width: 100%;
 }
 
 .route-slots-panel {
-  border: 1px solid var(--line);
+  border: 3px solid #111111;
   border-radius: 8px;
   background: #fff;
-  padding: 12px;
+  padding: 16px;
   display: grid;
-  gap: 10px;
+  gap: 14px;
 }
 
 .route-slots-panel small {
@@ -814,21 +815,20 @@ th {
 
 .route-delivery-slots {
   display: grid;
-  gap: 8px;
-  max-height: 520px;
-  overflow: auto;
-  padding-right: 4px;
+  gap: 14px;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .route-slot {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 14px;
   align-items: start;
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 8px;
   background: #fbfdfc;
-  padding: 8px;
+  padding: 14px;
 }
 
 .route-slot .compact-file-button,
@@ -848,7 +848,7 @@ th {
 .route-slot-attach {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
 }
 
@@ -860,8 +860,8 @@ th {
 }
 
 .route-slot-attach select {
-  min-width: 190px;
-  flex: 1 1 190px;
+  min-width: 260px;
+  flex: 1 1 320px;
 }
 
 .route-slot-notes label {
@@ -874,10 +874,11 @@ th {
 }
 
 .route-slot-invoice-line {
-  border: 1px solid var(--line);
+  border: 2px solid var(--line);
   border-radius: 8px;
   background: #fff;
-  padding: 8px;
+  padding: 12px;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(260px, 2fr) minmax(130px, 0.8fr) minmax(140px, 0.8fr);
 }
 
 .route-slot-invoice-line .route-delivered-summary-toggle {
@@ -941,8 +942,8 @@ th {
 }
 
 .route-slot > strong {
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -959,7 +960,7 @@ th {
 .route-slot-body {
   min-width: 0;
   display: grid;
-  gap: 4px;
+  gap: 8px;
 }
 
 .route-slot-body label {
@@ -978,14 +979,14 @@ th {
 }
 
 .compact-file-button {
-  min-height: 40px;
-  padding: 8px 10px;
-  font-size: 0.82rem;
+  min-height: 46px;
+  padding: 10px 12px;
+  font-size: 0.95rem;
 }
 
 .compact-slot-button {
-  min-height: 40px;
-  padding: 8px 10px;
+  min-height: 46px;
+  padding: 10px 14px;
   white-space: nowrap;
 }
 
@@ -1223,8 +1224,13 @@ th {
     grid-template-columns: 36px minmax(0, 1fr);
   }
 
+  .route-slot-invoice-line {
+    grid-template-columns: 1fr;
+  }
+
   .route-slot .compact-file-button,
   .route-slot .route-slot-attach,
+  .route-slot .route-manual-invoice-button,
   .route-slot .route-delivered-toggle,
   .route-slot .compact-slot-button {
     grid-column: 1 / -1;

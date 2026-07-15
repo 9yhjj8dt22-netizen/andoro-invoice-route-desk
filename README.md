@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v71 stricter PDF invoice parsing for Bill To, invoice number, and invoice total.
+Current live app version: v72 route scan review, targeted scanned-PDF fields, and easier route builder layout.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
