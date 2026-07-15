@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=73",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=74",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -674,23 +674,40 @@ function normalizedName(value = "") {
 
 function normalizedAddress(value = "") {
   return normalizedName(value)
+    .replace(/\bc\s*\/?\s*o\b/g, "care of")
     .replace(/\b(missouri|mo)\b/g, "mo")
+    .replace(/\b(illinois|il)\b/g, "il")
     .replace(/\b(street|st)\b/g, "st")
     .replace(/\b(road|rd)\b/g, "rd")
     .replace(/\b(drive|dr)\b/g, "dr")
     .replace(/\b(boulevard|blvd)\b/g, "blvd")
     .replace(/\b(highway|hwy)\b/g, "hwy")
+    .replace(/\b(avenue|ave)\b/g, "ave")
+    .replace(/\b(lane|ln)\b/g, "ln")
+    .replace(/\b(court|ct)\b/g, "ct")
+    .replace(/\b(place|pl)\b/g, "pl")
+    .replace(/\b(suite|ste)\b/g, "ste")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 function addressParts(value = "") {
   const address = normalizedAddress(value);
+  const streetNumber = address.match(/\b\d{1,6}\b/)?.[0] || "";
+  const streetWords = streetNumber
+    ? address
+      .slice(address.indexOf(streetNumber) + streetNumber.length)
+      .split(" ")
+      .filter((word) => word.length > 2 && !/^\d+$/.test(word) && !/^(mo|il|st|rd|dr|blvd|hwy|ave|ln|ct|pl|ste|care|of)$/.test(word))
+      .slice(0, 4)
+    : [];
   return {
     address,
     numbers: address.match(/\b\d+\b/g) || [],
     zip: address.match(/\b\d{5}\b/)?.[0] || "",
-    streetNumber: address.match(/^\D*(\d+)/)?.[1] || "",
+    streetNumber,
+    streetName: streetWords[0] || "",
+    streetWords,
     words: address.split(" ").filter((word) => word.length > 2 && !/^\d+$/.test(word))
   };
 }
@@ -700,11 +717,11 @@ function sameStoreAddress(a = "", b = "") {
   const right = addressParts(b);
   if (!left.address || !right.address) return false;
   if (left.address === right.address) return true;
-  if (left.address.includes(right.address) || right.address.includes(left.address)) return true;
+  if ((left.address.includes(right.address) || right.address.includes(left.address)) && Math.min(left.address.length, right.address.length) > 10) return true;
   if (left.streetNumber && right.streetNumber && left.streetNumber === right.streetNumber) {
-    const sharedWords = left.words.filter((word) => right.words.includes(word));
-    if (sharedWords.length >= 2) return true;
-    if (left.zip && right.zip && left.zip === right.zip && sharedWords.length >= 1) return true;
+    const sharedStreetWords = left.streetWords.filter((word) => right.streetWords.includes(word));
+    if (left.streetName && right.streetName && left.streetName === right.streetName) return true;
+    if (sharedStreetWords.length >= 2) return true;
   }
   return false;
 }
@@ -787,11 +804,33 @@ function storeMatchScore(store = {}, invoice = {}) {
   return score;
 }
 
+function rankedStoreMatches(invoice = {}, stores = state.stores || []) {
+  const invoiceAddress = normalizedAddress(invoice.address || "");
+  const invoiceName = normalizedName(cleanImportedCustomerName(invoice.customer || "") || invoice.customer || "");
+  return [...stores]
+    .map((store) => {
+      const storeAddress = normalizedAddress(store.address || "");
+      const storeName = normalizedName(store.name || "");
+      const addressMatch = Boolean(invoiceAddress && storeAddress && sameStoreAddress(store.address || "", invoice.address || ""));
+      const exactName = Boolean(invoiceName && storeName && invoiceName === storeName);
+      const score = storeMatchScore(store, invoice) + (addressMatch ? 500 : 0) + (exactName ? 80 : 0);
+      return { store, score, addressMatch, exactName };
+    })
+    .filter((match) => match.score > 0)
+    .sort((a, b) => {
+      if (b.addressMatch !== a.addressMatch) return Number(b.addressMatch) - Number(a.addressMatch);
+      return b.score - a.score;
+    });
+}
+
 function matchingStoreForInvoice(invoice = {}, stores = state.stores || []) {
-  const ranked = [...stores]
-    .map((store) => ({ store, score: storeMatchScore(store, invoice) }))
-    .sort((a, b) => b.score - a.score);
-  return ranked[0]?.score >= 70 ? ranked[0].store : null;
+  const ranked = rankedStoreMatches(invoice, stores);
+  const best = ranked[0];
+  if (!best) return null;
+  const hasInvoiceAddress = Boolean(normalizedAddress(invoice.address || ""));
+  if (best.addressMatch) return best.store;
+  if (hasInvoiceAddress) return best.score >= 140 ? best.store : null;
+  return best.exactName || best.score >= 100 ? best.store : null;
 }
 
 function canonicalizeImportedInvoice(invoice = {}, stores = state.stores || []) {
@@ -1037,8 +1076,58 @@ function invoiceLikeFromScan(scan = {}) {
   };
 }
 
+function possibleStoreForInvoice(invoice = {}, stores = state.stores || []) {
+  const ranked = rankedStoreMatches(invoice, stores);
+  return ranked.find((match) => match.addressMatch || match.score >= 90)?.store || null;
+}
+
+function confirmUsePossibleStore(invoice = {}, possibleStore = null) {
+  if (!possibleStore) return null;
+  const invoiceName = String(invoice.customer || "").trim() || "Unknown";
+  const invoiceAddress = String(invoice.address || "").trim() || "No address read";
+  const message = [
+    "This invoice may already match a saved store.",
+    "",
+    `Invoice read: ${invoiceName}`,
+    invoiceAddress,
+    "",
+    `Saved store: ${possibleStore.name}`,
+    possibleStore.address || "No saved address",
+    "",
+    "Use the saved store instead of adding a new one?"
+  ].join("\n");
+  return confirm(message) ? possibleStore : null;
+}
+
+function resolveStoreForInvoiceApproval(invoice = {}, stores = state.stores || []) {
+  const matched = matchingStoreForInvoice(invoice, stores);
+  if (matched) return matched;
+  return confirmUsePossibleStore(invoice, possibleStoreForInvoice(invoice, stores));
+}
+
+function approveScanStoreBeforeSave(scan = {}) {
+  const selected = (state.stores || []).find((store) => store.id === scan.matchedStoreId);
+  if (selected) {
+    applyStoreToScan(scan, selected);
+    return true;
+  }
+  const matched = resolveStoreForInvoiceApproval(scan, state.stores || []);
+  if (matched) {
+    applyStoreToScan(scan, matched);
+    return true;
+  }
+  if (!scan.customer || !scan.address) return false;
+  const addNew = confirm(`Add this as a new saved store?\n\nStore: ${scan.customer}\nAddress: ${scan.address}`);
+  if (!addNew) return false;
+  mergeStoreFromInvoice(state, invoiceLikeFromScan(scan));
+  state.stores = mergeStores([], state.stores || []);
+  const newStore = matchingStoreForInvoice(scan, state.stores || []);
+  if (newStore) applyStoreToScan(scan, newStore);
+  return true;
+}
+
 function approveStoreFromRouteScan(scan = {}) {
-  const matched = matchingStoreForInvoice(scan, state.stores || []);
+  const matched = resolveStoreForInvoiceApproval(scan, state.stores || []);
   if (matched) return matched;
   const name = String(scan.customer || "").trim();
   const address = String(scan.address || "").trim();
@@ -3558,6 +3647,10 @@ function attachEvents() {
       scan.items = lineItemsFromText(event.target.value);
     } else {
       scan[field] = event.target.value;
+      if (field === "customer" || field === "address") {
+        scan.matchedStoreId = "";
+        scan.importWarning = scan.number ? "Review store match" : "Needs invoice number";
+      }
     }
     saveState();
     if (["routeOrder", "routeNote", "address", "customer", "total", "amount", "balanceDue", "itemsText"].includes(field)) {
@@ -4731,7 +4824,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=73";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=74";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
@@ -4861,9 +4954,14 @@ function saveScansAsInvoices(scans = []) {
   const lisaCount = ready.filter((scan) => scanLisaHandled(scan)).length;
   const invoices = [];
   let skipped = 0;
+  let skippedStoreReview = 0;
   ready.forEach((scan) => {
     if (scan.savedInvoiceId && state.invoices.some((invoice) => invoice.id === scan.savedInvoiceId)) {
       skipped += 1;
+      return;
+    }
+    if (!approveScanStoreBeforeSave(scan)) {
+      skippedStoreReview += 1;
       return;
     }
     const scanItems = scan.items || lineItemsFromText(scan.itemsText);
@@ -4904,7 +5002,7 @@ function saveScansAsInvoices(scans = []) {
   state.invoices.unshift(...invoices);
   state.stores = mergeStores([], state.stores || []);
   saveState();
-  return { saved: invoices.length, lisaCount, skipped };
+  return { saved: invoices.length, lisaCount, skipped, skippedStoreReview };
 }
 
 async function buildRouteFromDeliverySlots() {
@@ -4989,7 +5087,7 @@ async function buildRouteFromDeliverySlots() {
   const allSlotScans = filledSlots.flatMap((entry) => entry.scans);
   const invoiceScans = allSlotScans.filter((scan) => scanHasInvoice(scan) && scanReadyToSave(scan));
   const reviewCount = allSlotScans.filter((scan) => scanHasInvoice(scan) && !scanReadyToSave(scan)).length;
-  const result = invoiceScans.length ? saveScansAsInvoices(invoiceScans) : { saved: 0, lisaCount: 0, skipped: 0 };
+  const result = invoiceScans.length ? saveScansAsInvoices(invoiceScans) : { saved: 0, lisaCount: 0, skipped: 0, skippedStoreReview: 0 };
   if (!result) {
     els.buildRoute.disabled = false;
     els.buildRoute.textContent = originalLabel;
@@ -5001,7 +5099,7 @@ async function buildRouteFromDeliverySlots() {
   els.buildRoute.disabled = false;
   els.buildRoute.textContent = originalLabel;
   const miles = routeDistance(optimizedStops, fixedRouteOrigin());
-  alert(`Route built in the most efficient order from 92 Produce Row and returning to 92 Produce Row. ${optimizedStops.length} stop${optimizedStops.length === 1 ? "" : "s"} routed, about ${miles.toFixed(1)} miles before traffic.${geocodeResult.missing ? ` ${geocodeResult.missing} stop${geocodeResult.missing === 1 ? "" : "s"} could not be mapped and stayed at the end.` : ""} ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
+  alert(`Route built in the most efficient order from 92 Produce Row and returning to 92 Produce Row. ${optimizedStops.length} stop${optimizedStops.length === 1 ? "" : "s"} routed, about ${miles.toFixed(1)} miles before traffic.${geocodeResult.missing ? ` ${geocodeResult.missing} stop${geocodeResult.missing === 1 ? "" : "s"} could not be mapped and stayed at the end.` : ""} ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${result.skippedStoreReview ? ` ${result.skippedStoreReview} invoice${result.skippedStoreReview === 1 ? "" : "s"} not saved because the store was not approved.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
 }
 
 function saveScannedInvoices() {
@@ -5009,7 +5107,7 @@ function saveScannedInvoices() {
   if (!result) return;
   render();
   setTab("invoices");
-  alert(`${result.saved} scanned invoice${result.saved === 1 ? "" : "s"} saved.${result.skipped ? ` ${result.skipped} already saved.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
+  alert(`${result.saved} scanned invoice${result.saved === 1 ? "" : "s"} saved.${result.skipped ? ` ${result.skipped} already saved.` : ""}${result.skippedStoreReview ? ` ${result.skippedStoreReview} invoice${result.skippedStoreReview === 1 ? "" : "s"} not saved because the store was not approved.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
 }
 
 setupAccessGate();
