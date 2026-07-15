@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=75",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=76",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -110,6 +110,7 @@ const sampleData = {
     rep: DEFAULT_REP,
     startingInvoiceNumber: "",
     leaveHomeTime: "",
+    arriveFactoryTime: "",
     startTime: "",
     finishTime: "",
     notes: "",
@@ -377,6 +378,7 @@ const els = {
   routeDayRep: document.querySelector("#routeDayRep"),
   routeStartInvoice: document.querySelector("#routeStartInvoice"),
   routeLeaveHomeTime: document.querySelector("#routeLeaveHomeTime"),
+  routeArriveFactoryTime: document.querySelector("#routeArriveFactoryTime"),
   routeStartTime: document.querySelector("#routeStartTime"),
   routeFinishTime: document.querySelector("#routeFinishTime"),
   routeDayNotes: document.querySelector("#routeDayNotes"),
@@ -638,6 +640,7 @@ function render() {
   els.routeDayRep.value = routeRep();
   els.routeStartInvoice.value = state.routeDay?.startingInvoiceNumber || "";
   els.routeLeaveHomeTime.value = state.routeDay?.leaveHomeTime || "";
+  els.routeArriveFactoryTime.value = state.routeDay?.arriveFactoryTime || "";
   els.routeStartTime.value = state.routeDay?.startTime || "";
   els.routeFinishTime.value = state.routeDay?.finishTime || "";
   els.routeDayNotes.value = state.routeDay?.notes || "";
@@ -2219,6 +2222,21 @@ function routeStartMinutes() {
   return now.getHours() * 60 + now.getMinutes();
 }
 
+function minutesBetweenTimes(start = "", end = "") {
+  const startMinutes = timeToMinutes(start);
+  const endMinutes = timeToMinutes(end);
+  if (startMinutes === null || endMinutes === null) return null;
+  return endMinutes >= startMinutes ? endMinutes - startMinutes : endMinutes + 1440 - startMinutes;
+}
+
+function routeFactoryLoadingLabel() {
+  const minutes = minutesBetweenTimes(state.routeDay?.arriveFactoryTime || "", state.routeDay?.startTime || "");
+  if (minutes === null) return "";
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  return hours ? `${hours} hr ${remainder} min` : `${remainder} min`;
+}
+
 function deliveryTimeMinutes(stop = {}) {
   return timeToMinutes(stop.dt || stop.scan?.dt || stop.store?.dt || stop.scan?.specialInstructions || stop.store?.specialInstructions || "");
 }
@@ -2443,7 +2461,9 @@ function routeSummaryHtml() {
         <div>Leave home: ${escapeHtml(state.routeDay?.leaveHomeTime || "")}</div>
         <div>Home: ${escapeHtml(HOME_ROUTE_START.address)}</div>
         <div>Home to factory: about ${HOME_ROUTE_START.factoryDriveMinutes} minutes</div>
+        <div>Arrived factory: ${escapeHtml(state.routeDay?.arriveFactoryTime || "")}</div>
         <div>Route start: ${escapeHtml(state.routeDay?.startTime || "Build time")}</div>
+        <div>Van loading time: ${escapeHtml(routeFactoryLoadingLabel() || "")}</div>
         <div>Factory: ${escapeHtml(FIXED_ROUTE_ORIGIN.address)}</div>
         <div>Route finish: ${escapeHtml(state.routeDay?.finishTime || "")}</div>
         <div>Starting invoice #: ${escapeHtml(state.routeDay?.startingInvoiceNumber || "")}</div>
@@ -3335,6 +3355,7 @@ function saveRouteDaySettings() {
   state.routeDay.rep = els.routeDayRep.value.trim() || DEFAULT_REP;
   state.routeDay.startingInvoiceNumber = els.routeStartInvoice.value.trim();
   state.routeDay.leaveHomeTime = els.routeLeaveHomeTime.value;
+  state.routeDay.arriveFactoryTime = els.routeArriveFactoryTime.value;
   state.routeDay.startTime = els.routeStartTime.value;
   state.routeDay.finishTime = els.routeFinishTime.value;
   state.routeDay.notes = els.routeDayNotes.value;
@@ -3446,6 +3467,7 @@ function clearRouteDay() {
     rep: DEFAULT_REP,
     startingInvoiceNumber: "",
     leaveHomeTime: "",
+    arriveFactoryTime: "",
     startTime: "",
     finishTime: "",
     notes: "",
@@ -3524,6 +3546,7 @@ function attachEvents() {
   els.routeDayRep.addEventListener("input", saveRouteDaySettings);
   els.routeStartInvoice.addEventListener("input", saveRouteDaySettings);
   els.routeLeaveHomeTime.addEventListener("input", saveRouteDaySettings);
+  els.routeArriveFactoryTime.addEventListener("input", saveRouteDaySettings);
   els.routeStartTime.addEventListener("input", saveRouteDaySettings);
   els.routeFinishTime.addEventListener("input", saveRouteDaySettings);
   els.routeDayNotes.addEventListener("input", saveRouteDaySettings);
@@ -4838,7 +4861,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=75";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=76";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

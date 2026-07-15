@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v75 leave-home time tracking on Today's Route and route summary.
+Current live app version: v76 factory arrival and van loading time tracking on Today's Route.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
