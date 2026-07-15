@@ -1010,6 +1010,42 @@ function mergeStoreFromInvoice(targetState, invoice) {
   else targetState.stores.push(store);
 }
 
+function invoiceLikeFromScan(scan = {}) {
+  return {
+    customer: scan.customer || "",
+    customerEmail: scan.customerEmail || "",
+    address: scan.address || "",
+    number: scan.number || "",
+    invoiceDate: scan.invoiceDate || routeDate(),
+    terms: scan.terms || "",
+    poNumber: scan.poNumber || "",
+    rep: scan.rep || "",
+    specialInstructions: scan.specialInstructions || "",
+    mainPhone: scan.mainPhone || "",
+    altPhone: scan.altPhone || "",
+    dt: scan.dt || "",
+    items: scan.items || lineItemsFromText(scan.itemsText || ""),
+    total: Number(scan.total || scan.amount || scan.balanceDue || 0),
+    balanceDue: Number(scan.balanceDue || scan.total || scan.amount || 0),
+    lisaHandled: scanLisaHandled(scan)
+  };
+}
+
+function approveStoreFromRouteScan(scan = {}) {
+  const matched = matchingStoreForInvoice(scan, state.stores || []);
+  if (matched) return matched;
+  const name = String(scan.customer || "").trim();
+  const address = String(scan.address || "").trim();
+  if (!name || !address) return null;
+  const approved = confirm(`This invoice does not match a saved store.\n\nStore: ${name}\nAddress: ${address}\n\nAdd this store to Saved Stores?`);
+  if (!approved) return null;
+  mergeStoreFromInvoice(state, invoiceLikeFromScan(scan));
+  state.stores = mergeStores([], state.stores || []);
+  return matchingStoreForInvoice(scan, state.stores || [])
+    || (state.stores || []).find((store) => store.name.toLowerCase() === formatStoreName(name, address).toLowerCase())
+    || null;
+}
+
 function currentOrderMap() {
   return new Map(nonDeliveryItems(lineItemsFromText(els.lineItemsText.value)).map((item) => [productKey(item), item]));
 }
@@ -3555,6 +3591,7 @@ function attachSavedInvoiceToRouteSlot(slot) {
   const store = (state.stores || []).find((item) => item.id === slotRecord.storeId)
     || invoiceStore(invoice)
     || matchingStoreForInvoice(invoice);
+  const approvedStore = store || approveStoreFromRouteScan(invoice);
   const existingScan = routeSlotScanIds(slotRecord)
     .map((scanId) => (state.scans || []).find((item) => item.id === scanId))
     .find((scan) => scan?.savedInvoiceId === invoice.id);
@@ -3562,10 +3599,10 @@ function attachSavedInvoiceToRouteSlot(slot) {
     alert("That invoice is already attached to this stop.");
     return;
   }
-  const scan = scanFromSavedInvoice(invoice, slot, store);
-  if (store) {
-    applyStoreToScan(scan, store);
-    slotRecord.storeId = store.id;
+  const scan = scanFromSavedInvoice(invoice, slot, approvedStore);
+  if (approvedStore) {
+    applyStoreToScan(scan, approvedStore);
+    slotRecord.storeId = approvedStore.id;
   }
   assignScanToRouteSlot(scan, slot);
   state.scans = state.scans || [];
@@ -4432,11 +4469,6 @@ function moveRouteSlot(fromSlot, toSlot) {
 async function processRouteSlotFile(file, slot) {
   if (!file) return;
   const slotRecord = routeDeliverySlot(slot);
-  const store = (state.stores || []).find((item) => item.id === slotRecord?.storeId);
-  if (!store) {
-    alert("Select the store for this delivery spot before attaching the invoice.");
-    return;
-  }
   if (!window.Tesseract) {
     alert("The photo reader could not load. Check your internet connection and try again.");
     return;
@@ -4454,7 +4486,14 @@ async function processRouteSlotFile(file, slot) {
     const text = await readImageInvoice(file, file.name);
     scan = parseInvoiceText(text, file.name);
   }
-  applyStoreToScan(scan, store);
+  const store = (state.stores || []).find((item) => item.id === slotRecord?.storeId)
+    || approveStoreFromRouteScan(scan);
+  if (store) {
+    applyStoreToScan(scan, store);
+    if (slotRecord) slotRecord.storeId = store.id;
+  } else if (scan.customer || scan.address) {
+    alert(`Invoice read, but no store was added.\n\nStore: ${scan.customer || "Unknown"}\nAddress: ${scan.address || "No address found"}\n\nYou can still select or add the store manually.`);
+  }
   assignScanToRouteSlot(scan, slot);
   state.scans = state.scans || [];
   state.scans.push(scan);
