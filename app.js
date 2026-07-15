@@ -1662,17 +1662,19 @@ function renderRouteDayCapture() {
   renderRouteDayStatus();
 }
 
-function parseInvoiceText(rawText, fileName) {
+function parseInvoiceText(rawText, fileName, layout = null) {
   const text = rawText.replace(/\r/g, "\n");
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const amountMatches = amountsFromText(text);
   const dateMatches = [...text.matchAll(/\b([0-1]?\d[\/\-][0-3]?\d[\/\-](?:20)?\d{2})\b/g)].map((match) => normalizeDate(match[1]));
-  const invoiceNumber = text.match(/invoice\s*#?\s*[:\-]?\s*([0-9A-Z-]{3,})/i)?.[1]
-    || findValueAfterLabel(lines, /invoice\s*#/i)
+  const layoutInvoice = parseLayoutInvoice(layout);
+  const invoiceNumber = layoutInvoice.number
+    || invoiceNumberFromText(text)
+    || extractInvoiceNumberFromLine(findValueAfterLabel(lines, /invoice\s*#/i))
     || invoiceNumberNearDate(lines)
     || "";
-  const billTo = parseBillTo(lines);
-  const totals = parseTotals(text, amountMatches);
+  const billTo = layoutInvoice.billTo?.customer ? layoutInvoice.billTo : parseBillTo(lines);
+  const totals = parseTotals(text, amountMatches, layoutInvoice);
   const items = parseLineItems(lines);
   const terms = findValueAfterLabel(lines, /^terms$/i) || text.match(/\bNet\s*\d+\b/i)?.[0] || "";
   const rawCustomer = billTo.customer || findCustomer(lines, invoiceNumber);
@@ -1733,9 +1735,12 @@ function parseBillTo(lines) {
   const billIndex = lines.findIndex((line) => /bill\s*to/i.test(line));
   if (billIndex < 0) return { customer: "", address: "" };
   const block = [];
+  const sameLine = lines[billIndex].replace(/.*bill\s*to[:\s]*/i, "").trim();
+  if (sameLine && sameLine !== lines[billIndex] && !isCompanyHeaderLine(sameLine)) block.push(sameLine);
   for (const line of lines.slice(billIndex + 1, billIndex + 8)) {
-    if (/special instructions|p\.?o\.?|terms|description|qty|u\/m|rate|amount|invoice/i.test(line)) break;
+    if (/special instructions|p\.?o\.?|terms|description|qty|u\/m|rate|amount|invoice|andoro\s*&?\s*sons|appaloosa|high ridge/i.test(line)) break;
     if (/^bill\s*to$/i.test(line)) continue;
+    if (isCompanyHeaderLine(line)) continue;
     block.push(line);
   }
   const customerIndex = block.findIndex((line) => !looksLikeAddressLine(line));
@@ -1747,11 +1752,106 @@ function parseBillTo(lines) {
   return { customer, address };
 }
 
+function isCompanyHeaderLine(line = "") {
+  return /andoro\s*&?\s*sons|2340\s+appaloosa|appaloosa\s+trail|high\s+ridge|tasting\s+is\s+believing|andoropizza|6363329005|1-800-657-0467/i.test(line);
+}
+
+function parseLayoutInvoice(layout) {
+  if (!layout?.lines?.length) return {};
+  return {
+    billTo: parseLayoutBillTo(layout),
+    number: parseLayoutInvoiceNumber(layout),
+    total: parseLayoutTotal(layout)
+  };
+}
+
+function parseLayoutBillTo(layout) {
+  const pageWidth = Number(layout.width || 0);
+  const pageHeight = Number(layout.height || 0);
+  const billLine = layout.lines.find((line) => /bill\s*to/i.test(line.text) && line.x < pageWidth * 0.55);
+  if (!billLine) return { customer: "", address: "" };
+  const bottomLimit = pageHeight * 0.43;
+  const rightLimit = Math.max(pageWidth * 0.55, billLine.x + pageWidth * 0.32);
+  const block = layout.lines
+    .filter((line) => line.y < billLine.y - 4 && line.y > bottomLimit && line.x >= Math.max(0, billLine.x - 35) && line.x < rightLimit)
+    .filter((line) => !/special instructions|p\.?o\.?|terms|description|qty|u\/m|rate|amount|invoice/i.test(line.text))
+    .map((line) => line.text.trim())
+    .filter((line) => line && !isCompanyHeaderLine(line))
+    .slice(0, 5);
+  const customerIndex = block.findIndex((line) => !looksLikeAddressLine(line) && !/\b[A-Z]{2}\s+\d{5}\b/i.test(line));
+  const customer = customerIndex >= 0 ? cleanImportedCustomerName(block[customerIndex]) : "";
+  const address = block
+    .filter((line, index) => index !== customerIndex)
+    .filter((line) => looksLikeAddressLine(line) || /\b[A-Z]{2}\s+\d{5}\b/i.test(line))
+    .join(", ");
+  return { customer, address };
+}
+
+function parseLayoutInvoiceNumber(layout) {
+  const pageWidth = Number(layout.width || 0);
+  const pageHeight = Number(layout.height || 0);
+  const rightTopLines = layout.lines.filter((line) => line.x > pageWidth * 0.55 && line.y > pageHeight * 0.68);
+  const label = rightTopLines.find((line) => /invoice\s*#/i.test(line.text));
+  if (label) {
+    const below = rightTopLines
+      .filter((line) => line.y < label.y - 2 && Math.abs(line.x - label.x) < pageWidth * 0.18)
+      .sort((a, b) => b.y - a.y || a.x - b.x)
+      .map((line) => extractInvoiceNumberFromLine(line.text))
+      .find(Boolean);
+    if (below) return below;
+  }
+  const merged = rightTopLines.map((line) => line.text).join("\n");
+  return invoiceNumberFromText(merged);
+}
+
+function invoiceNumberFromText(text = "") {
+  const lines = String(text).split("\n").map((line) => line.trim()).filter(Boolean);
+  for (const [index, line] of lines.entries()) {
+    if (!/invoice\s*#/i.test(line)) continue;
+    const sameLine = line.replace(/.*invoice\s*#\s*[:\-]*/i, "").trim();
+    const sameLineNumber = extractInvoiceNumberFromLine(sameLine);
+    if (sameLineNumber) return sameLineNumber;
+    for (const nearby of lines.slice(index + 1, index + 4)) {
+      const nearbyNumber = extractInvoiceNumberFromLine(nearby);
+      if (nearbyNumber) return nearbyNumber;
+    }
+  }
+  return "";
+}
+
+function extractInvoiceNumberFromLine(line = "") {
+  const cleaned = String(line).replace(/\b[0-1]?\d[\/\-][0-3]?\d[\/\-](?:20)?\d{2}\b/g, " ");
+  const candidates = [...cleaned.matchAll(/\b([0-9][0-9A-Z-]{2,})\b/gi)]
+    .map((match) => match[1])
+    .filter((value) => !/^(?:19|20)\d{2}$/.test(value));
+  return candidates.at(-1) || "";
+}
+
+function parseLayoutTotal(layout) {
+  const pageWidth = Number(layout.width || 0);
+  const pageHeight = Number(layout.height || 0);
+  const lowerRightLines = layout.lines.filter((line) => line.x > pageWidth * 0.56 && line.y < pageHeight * 0.32);
+  const balanceLine = lowerRightLines.find((line) => /balance\s+due/i.test(line.text));
+  const totalLine = lowerRightLines.find((line) => /^total\b/i.test(line.text));
+  const preferred = balanceLine || totalLine;
+  if (preferred) {
+    const inline = amountsFromText(preferred.text).at(-1);
+    if (inline) return inline;
+    const sameRow = lowerRightLines
+      .filter((line) => Math.abs(line.y - preferred.y) < 8 && line.x > preferred.x)
+      .sort((a, b) => b.x - a.x)
+      .map((line) => amountsFromText(line.text).at(-1))
+      .find((value) => Number(value) > 0);
+    if (sameRow) return sameRow;
+  }
+  const amounts = lowerRightLines.flatMap((line) => amountsFromText(line.text));
+  return amounts.at(-1) || 0;
+}
+
 function invoiceNumberNearDate(lines) {
   const dateLine = lines.find((line) => /\b[0-1]?\d[\/\-][0-3]?\d[\/\-](?:20)?\d{2}\b/.test(line) && /\b\d{3,}\b/.test(line));
   if (!dateLine) return "";
-  const numbers = [...dateLine.matchAll(/\b\d{3,}\b/g)].map((match) => match[0]);
-  return numbers.at(-1) || "";
+  return extractInvoiceNumberFromLine(dateLine);
 }
 
 function findValueAfterLabel(lines, pattern) {
@@ -1769,7 +1869,7 @@ function parseSpecialInstructions(lines) {
   return lines.slice(start + 1, end > start ? end : start + 5).join("\n");
 }
 
-function parseTotals(text, amounts) {
+function parseTotals(text, amounts, layoutInvoice = {}) {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const amountFromLine = (pattern) => {
     const line = lines.find((entry) => pattern.test(entry));
@@ -1778,9 +1878,9 @@ function parseTotals(text, amounts) {
   };
   const customerTotalBalance = amountFromLine(/customer\s+total\s+balance/i);
   const paymentsCredits = amountFromLine(/payments\s*\/?\s*credits/i);
-  const balanceDue = amountFromLine(/balance\s+due/i) || amounts.at(-1) || 0;
+  const balanceDue = layoutInvoice.total || amountFromLine(/balance\s+due/i) || amounts.at(-1) || 0;
   const totalLine = lines.find((entry) => /^total\b/i.test(entry));
-  const total = totalLine ? amountsFromText(totalLine).at(-1) || 0 : amounts.at(-3) || balanceDue;
+  const total = layoutInvoice.total || (totalLine ? amountsFromText(totalLine).at(-1) || 0 : amounts.at(-3) || balanceDue);
   return { customerTotalBalance, total, paymentsCredits, balanceDue };
 }
 
@@ -4289,7 +4389,7 @@ async function processPhotos() {
     if (file.type === "application/pdf") {
       const pages = await readPdfInvoice(file);
       pages.forEach((page, pageIndex) => {
-        const scan = parseInvoiceText(page.text, page.fileName);
+        const scan = parseInvoiceText(page.text, page.fileName, page.layout);
         if (index + pageIndex < ROUTE_SLOT_COUNT) assignScanToRouteSlot(scan, index + pageIndex + 1);
         state.scans.push(scan);
       });
@@ -4481,7 +4581,7 @@ async function processRouteSlotFile(file, slot) {
   let scan;
   if (file.type === "application/pdf") {
     const pages = await readPdfInvoice(file);
-    scan = parseInvoiceText(pages[0]?.text || "", pages[0]?.fileName || file.name);
+    scan = parseInvoiceText(pages[0]?.text || "", pages[0]?.fileName || file.name, pages[0]?.layout);
   } else {
     const text = await readImageInvoice(file, file.name);
     scan = parseInvoiceText(text, file.name);
@@ -4547,13 +4647,14 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=70";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=71";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     els.scanStatus.textContent = `Reading ${file.name}: page ${pageNumber} of ${pdf.numPages}`;
     const page = await pdf.getPage(pageNumber);
+    const nativeLayout = await readPdfTextLayout(page);
     const viewport = page.getViewport({ scale: 2 });
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -4562,9 +4663,59 @@ async function readPdfInvoice(file) {
     await page.render({ canvasContext: context, viewport }).promise;
     const image = canvas.toDataURL("image/png");
     const text = await readImageInvoice(image, `${file.name} page ${pageNumber}`);
-    pages.push({ text, fileName: `${file.name} page ${pageNumber}` });
+    const nativeText = nativeLayout?.text || "";
+    pages.push({
+      text: nativeText.length > text.length * 0.4 ? `${nativeText}\n${text}` : text,
+      fileName: `${file.name} page ${pageNumber}`,
+      layout: nativeLayout
+    });
   }
   return pages;
+}
+
+async function readPdfTextLayout(page) {
+  try {
+    const viewport = page.getViewport({ scale: 1 });
+    const content = await page.getTextContent();
+    const items = content.items
+      .map((item) => ({
+        text: String(item.str || "").trim(),
+        x: Number(item.transform?.[4] || 0),
+        y: Number(item.transform?.[5] || 0)
+      }))
+      .filter((item) => item.text);
+    if (!items.length) return null;
+    const groups = [];
+    items
+      .sort((a, b) => b.y - a.y || a.x - b.x)
+      .forEach((item) => {
+        let group = groups.find((entry) => Math.abs(entry.y - item.y) < 4);
+        if (!group) {
+          group = { y: item.y, items: [] };
+          groups.push(group);
+        }
+        group.items.push(item);
+      });
+    const lines = groups
+      .map((group) => {
+        const sorted = group.items.sort((a, b) => a.x - b.x);
+        return {
+          x: sorted[0]?.x || 0,
+          y: group.y,
+          text: sorted.map((item) => item.text).join(" ").replace(/\s+/g, " ").trim()
+        };
+      })
+      .filter((line) => line.text)
+      .sort((a, b) => b.y - a.y || a.x - b.x);
+    return {
+      width: viewport.width,
+      height: viewport.height,
+      lines,
+      text: lines.map((line) => line.text).join("\n")
+    };
+  } catch {
+    return null;
+  }
 }
 
 function clearScans() {
