@@ -1,4 +1,4 @@
-const CACHE_NAME = "andoro-invoice-route-desk-v72";
+const CACHE_NAME = "andoro-invoice-route-desk-v73";
 const APP_FILES = [
   "./",
   "./index.html",
@@ -6,6 +6,17 @@ const APP_FILES = [
   "./app.js",
   "./assets/vendor/pdfjs/pdf.min.js",
   "./assets/vendor/pdfjs/pdf.worker.min.js",
+  "./assets/vendor/tesseract/tesseract.min.js",
+  "./assets/vendor/tesseract/worker.min.js",
+  "./assets/vendor/tesseract/lang/eng.traineddata.gz",
+  "./assets/vendor/tesseract/core/tesseract-core.wasm.js",
+  "./assets/vendor/tesseract/core/tesseract-core.wasm",
+  "./assets/vendor/tesseract/core/tesseract-core-simd.wasm.js",
+  "./assets/vendor/tesseract/core/tesseract-core-simd.wasm",
+  "./assets/vendor/tesseract/core/tesseract-core-lstm.wasm.js",
+  "./assets/vendor/tesseract/core/tesseract-core-lstm.wasm",
+  "./assets/vendor/tesseract/core/tesseract-core-simd-lstm.wasm.js",
+  "./assets/vendor/tesseract/core/tesseract-core-simd-lstm.wasm",
   "./manifest.webmanifest",
   "./assets/andoro-logo.jpg",
   "./assets/andoro-pizza-logo.jpg",

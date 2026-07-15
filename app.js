@@ -3,6 +3,12 @@ const STORES_STORAGE_KEY = "andoro_saved_stores_v1";
 const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
+const TESSERACT_OPTIONS = {
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=73",
+  corePath: "assets/vendor/tesseract/core",
+  langPath: "assets/vendor/tesseract/lang",
+  workerBlobURL: false
+};
 const TAB_HEADERS = {
   invoices: "Check Store Needs - Build Order - Get Signature - Print / Share",
   scan: "Route Organizer / Summary",
@@ -4714,6 +4720,7 @@ function clearRouteDeliverySlot(slot) {
 
 async function readImageInvoice(imageSource, label) {
   const result = await Tesseract.recognize(imageSource, "eng", {
+    ...TESSERACT_OPTIONS,
     logger: (message) => {
       if (message.status === "recognizing text") {
         els.scanStatus.textContent = `Reading ${label}: ${Math.round(message.progress * 100)}%`;
@@ -4724,7 +4731,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=72";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=73";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
