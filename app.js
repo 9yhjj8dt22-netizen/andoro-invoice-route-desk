@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=74",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=75",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -87,6 +87,10 @@ const PIZZAS_PER_CASE = 12;
 const CASES_PER_SHELF = 2;
 const DEFAULT_DELIVERY_FEE = 10;
 const DEFAULT_REP = "J.Ballew";
+const HOME_ROUTE_START = {
+  address: "3555 Elk Ridge Dr, Arnold, MO",
+  factoryDriveMinutes: 30
+};
 const FIXED_ROUTE_ORIGIN = {
   address: "92 Produce Row, St. Louis, MO 63102",
   lat: 38.6508865,
@@ -105,6 +109,7 @@ const sampleData = {
     date: "",
     rep: DEFAULT_REP,
     startingInvoiceNumber: "",
+    leaveHomeTime: "",
     startTime: "",
     finishTime: "",
     notes: "",
@@ -371,6 +376,7 @@ const els = {
   routeDayDate: document.querySelector("#routeDayDate"),
   routeDayRep: document.querySelector("#routeDayRep"),
   routeStartInvoice: document.querySelector("#routeStartInvoice"),
+  routeLeaveHomeTime: document.querySelector("#routeLeaveHomeTime"),
   routeStartTime: document.querySelector("#routeStartTime"),
   routeFinishTime: document.querySelector("#routeFinishTime"),
   routeDayNotes: document.querySelector("#routeDayNotes"),
@@ -631,6 +637,7 @@ function render() {
   els.routeDayDate.value = routeDate();
   els.routeDayRep.value = routeRep();
   els.routeStartInvoice.value = state.routeDay?.startingInvoiceNumber || "";
+  els.routeLeaveHomeTime.value = state.routeDay?.leaveHomeTime || "";
   els.routeStartTime.value = state.routeDay?.startTime || "";
   els.routeFinishTime.value = state.routeDay?.finishTime || "";
   els.routeDayNotes.value = state.routeDay?.notes || "";
@@ -2433,7 +2440,11 @@ function routeSummaryHtml() {
       <div class="meta">
         <div>${escapeHtml(formatDate(routeDate()))}</div>
         <div>Rep: ${escapeHtml(routeRep())}</div>
+        <div>Leave home: ${escapeHtml(state.routeDay?.leaveHomeTime || "")}</div>
+        <div>Home: ${escapeHtml(HOME_ROUTE_START.address)}</div>
+        <div>Home to factory: about ${HOME_ROUTE_START.factoryDriveMinutes} minutes</div>
         <div>Route start: ${escapeHtml(state.routeDay?.startTime || "Build time")}</div>
+        <div>Factory: ${escapeHtml(FIXED_ROUTE_ORIGIN.address)}</div>
         <div>Route finish: ${escapeHtml(state.routeDay?.finishTime || "")}</div>
         <div>Starting invoice #: ${escapeHtml(state.routeDay?.startingInvoiceNumber || "")}</div>
       </div>
@@ -3323,6 +3334,7 @@ function saveRouteDaySettings() {
   state.routeDay.date = els.routeDayDate.value || todayOffset(0);
   state.routeDay.rep = els.routeDayRep.value.trim() || DEFAULT_REP;
   state.routeDay.startingInvoiceNumber = els.routeStartInvoice.value.trim();
+  state.routeDay.leaveHomeTime = els.routeLeaveHomeTime.value;
   state.routeDay.startTime = els.routeStartTime.value;
   state.routeDay.finishTime = els.routeFinishTime.value;
   state.routeDay.notes = els.routeDayNotes.value;
@@ -3433,6 +3445,7 @@ function clearRouteDay() {
     date: todayOffset(0),
     rep: DEFAULT_REP,
     startingInvoiceNumber: "",
+    leaveHomeTime: "",
     startTime: "",
     finishTime: "",
     notes: "",
@@ -3510,6 +3523,7 @@ function attachEvents() {
   els.routeDayDate.addEventListener("input", saveRouteDaySettings);
   els.routeDayRep.addEventListener("input", saveRouteDaySettings);
   els.routeStartInvoice.addEventListener("input", saveRouteDaySettings);
+  els.routeLeaveHomeTime.addEventListener("input", saveRouteDaySettings);
   els.routeStartTime.addEventListener("input", saveRouteDaySettings);
   els.routeFinishTime.addEventListener("input", saveRouteDaySettings);
   els.routeDayNotes.addEventListener("input", saveRouteDaySettings);
@@ -4824,7 +4838,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=74";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=75";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

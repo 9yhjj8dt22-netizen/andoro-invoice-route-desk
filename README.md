@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v74 stricter store matching and duplicate prevention for scanned invoices.
+Current live app version: v75 leave-home time tracking on Today's Route and route summary.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
