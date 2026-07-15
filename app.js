@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=77",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=78",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -87,10 +87,6 @@ const PIZZAS_PER_CASE = 12;
 const CASES_PER_SHELF = 2;
 const DEFAULT_DELIVERY_FEE = 10;
 const DEFAULT_REP = "J.Ballew";
-const HOME_ROUTE_START = {
-  address: "3555 Elk Ridge Dr, Arnold, MO",
-  factoryDriveMinutes: 30
-};
 const FIXED_ROUTE_ORIGIN = {
   address: "92 Produce Row, St. Louis, MO 63102",
   lat: 38.6508865,
@@ -2435,8 +2431,10 @@ function routeSummaryHtml() {
     .money { text-align: right; white-space: nowrap; }
     .not-delivered td { background: #fff1f1; }
     .not-delivered td:nth-child(5) { color: #9f1117; }
+    @page { size: auto; margin: 0.25in; }
     @media print {
       .preview-actions { display: none; }
+      a[href]::after { content: ""; }
       main { padding: 0.22in; max-width: none; }
       header { padding-bottom: 8px; }
       img { width: 118px; }
@@ -2461,9 +2459,6 @@ function routeSummaryHtml() {
       <div class="meta">
         <div>${escapeHtml(formatDate(routeDate()))}</div>
         <div>Rep: ${escapeHtml(routeRep())}</div>
-        <div>Leave home: ${escapeHtml(state.routeDay?.leaveHomeTime || "")}</div>
-        <div>Home: ${escapeHtml(HOME_ROUTE_START.address)}</div>
-        <div>Home to factory: about ${HOME_ROUTE_START.factoryDriveMinutes} minutes</div>
         <div>Arrived factory: ${escapeHtml(state.routeDay?.arriveFactoryTime || "")}</div>
         <div>Route start: ${escapeHtml(state.routeDay?.startTime || "Build time")}</div>
         <div>Van loading time: ${escapeHtml(routeFactoryLoadingLabel() || "")}</div>
@@ -4343,6 +4338,7 @@ function printableInvoiceHtml(invoice) {
     .micro-compact .signature-label { font-size: 6.8px; padding-top: 0; }
     @media print {
       .preview-actions { display: none; }
+      a[href]::after { content: ""; }
       body { background: #fff; }
       html,
       body {
@@ -4445,11 +4441,11 @@ ${escapeHtml(invoice.customerEmail || "")}</div>
       <div class="foot-head">Phone #</div>
       <div class="foot-head">Fax #</div>
       <div class="foot-head">E-mail</div>
-      <div class="foot-head">Web Site</div>
+      <div class="foot-head"></div>
       <div>6363329005</div>
       <div>1-800-657-0467</div>
       <div>andoropizza@yahoo.com</div>
-      <div>www.andoropizza.com</div>
+      <div></div>
     </section>
   </main>
 </body>
@@ -4864,7 +4860,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=77";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=78";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

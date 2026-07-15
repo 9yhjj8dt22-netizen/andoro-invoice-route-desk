@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v77 route summary shows undelivered stops without adding them to day total.
+Current live app version: v78 hides home details and app-controlled URLs from print views.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
