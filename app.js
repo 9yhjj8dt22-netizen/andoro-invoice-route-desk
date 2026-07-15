@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=76",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=77",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -2310,7 +2310,6 @@ function routeInvoices() {
 }
 
 function routeInvoiceForScan(scan = {}) {
-  if (!scanDelivered(scan)) return null;
   return matchingInvoiceForRouteScan(scan) || null;
 }
 
@@ -2332,6 +2331,7 @@ function matchingInvoiceForRouteScan(scan = {}) {
 
 function routeDayTotal() {
   return routeSummaryInvoiceScans()
+    .filter(scanDelivered)
     .reduce((sum, scan) => sum + routeInvoiceTotalForScan(scan), 0);
 }
 
@@ -2372,11 +2372,11 @@ function syncAllRouteInvoiceLineFields() {
 
 function routeSummaryInvoiceScans() {
   return routeSlotScans().filter((scan) => {
-    if (!scanDelivered(scan)) return false;
     const hasNumber = Boolean(String(scan.number || "").trim());
     const hasSavedInvoice = Boolean(scan.savedInvoiceId);
     const hasTotal = routeInvoiceTotalForScan(scan) > 0;
-    return hasNumber || hasSavedInvoice || hasTotal;
+    const hasStopInfo = Boolean(scan.customer || scan.address || scan.routeNote);
+    return hasNumber || hasSavedInvoice || hasTotal || hasStopInfo;
   });
 }
 
@@ -2395,9 +2395,10 @@ function routeSummaryHtml() {
     const storeName = scan.customer || `Stop ${index + 1}`;
     const invoice = routeInvoiceForScan(scan);
     const invoiceNumber = invoice?.number || scan.number || "";
-    const stopInvoiceTotal = scanDelivered(scan) ? routeInvoiceTotalForScan(scan) : 0;
+    const delivered = scanDelivered(scan);
+    const stopInvoiceTotal = routeInvoiceTotalForScan(scan);
     return `
-      <tr>
+      <tr class="${delivered ? "" : "not-delivered"}">
         <td>${index + 1}</td>
         <td>
           <strong>${escapeHtml(storeName)}</strong>
@@ -2405,7 +2406,7 @@ function routeSummaryHtml() {
         </td>
         <td>${escapeHtml(invoiceNumber)}</td>
         <td>${scanLisaHandled(scan) ? "Office" : "Salesman"}</td>
-        <td>${scanDelivered(scan) ? "Yes" : "No"}</td>
+        <td><strong>${delivered ? "Delivered" : "Not delivered"}</strong></td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
         <td>${escapeHtml(scan.routeNote || "")}</td>
       </tr>`;
@@ -2432,6 +2433,8 @@ function routeSummaryHtml() {
     th, td { border: 1px solid #176b4d; padding: 8px; vertical-align: top; }
     td span { display: block; color: #4d6158; margin-top: 3px; }
     .money { text-align: right; white-space: nowrap; }
+    .not-delivered td { background: #fff1f1; }
+    .not-delivered td:nth-child(5) { color: #9f1117; }
     @media print {
       .preview-actions { display: none; }
       main { padding: 0.22in; max-width: none; }
@@ -4861,7 +4864,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=76";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=77";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
