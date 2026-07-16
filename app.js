@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=84",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=85",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -2445,10 +2445,9 @@ function routeSummaryHtml() {
     const invoice = routeInvoiceForScan(scan);
     const invoiceNumber = invoice?.number || scan.number || "";
     const delivered = scanDelivered(scan);
-    const paid = scanPaid(scan);
     const stopInvoiceTotal = routeInvoiceTotalForScan(scan);
     return `
-      <tr class="${delivered ? "" : "not-delivered"}${paid ? "" : " unpaid-stop"}">
+      <tr class="${delivered ? "" : "not-delivered"}">
         <td>${index + 1}</td>
         <td>
           <strong>${escapeHtml(storeName)}</strong>
@@ -2457,7 +2456,6 @@ function routeSummaryHtml() {
         <td>${escapeHtml(invoiceNumber)}</td>
         <td>${scanLisaHandled(scan) ? "Office" : "Salesman"}</td>
         <td><strong>${delivered ? "Delivered" : "Not delivered"}</strong></td>
-        <td><strong>${paid ? "Paid" : "Not paid"}</strong></td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
         <td class="note-cell">${escapeHtml(scan.routeNote || "")}</td>
       </tr>`;
@@ -2488,7 +2486,6 @@ function routeSummaryHtml() {
     .money { text-align: right; white-space: nowrap; }
     .not-delivered td { background: #fff1f1; }
     .not-delivered td:nth-child(5) { color: #9f1117; }
-    .unpaid-stop td:nth-child(6) { color: #9f1117; }
     @page { size: letter; margin: 0; }
     @media print {
       .preview-actions { display: none; }
@@ -2535,8 +2532,8 @@ function routeSummaryHtml() {
     <section class="notes">${escapeHtml(state.routeDay?.notes || "No general day notes.").replace(/\n/g, "<br>")}</section>
     <h2>Today's Route</h2>
     <table>
-      <thead><tr><th>Order</th><th>Store</th><th>Invoice #</th><th>Handled By</th><th>Delivered</th><th>Paid</th><th>Invoice Total</th><th>Notes</th></tr></thead>
-      <tbody>${stopRows || `<tr><td colspan="8">No route stops loaded.</td></tr>`}</tbody>
+      <thead><tr><th>Order</th><th>Store</th><th>Invoice #</th><th>Handled By</th><th>Delivered</th><th>Invoice Total</th><th>Notes</th></tr></thead>
+      <tbody>${stopRows || `<tr><td colspan="7">No route stops loaded.</td></tr>`}</tbody>
     </table>
     <h2>Gas / Expense Receipts</h2>
     <table>
@@ -4972,7 +4969,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=84";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=85";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

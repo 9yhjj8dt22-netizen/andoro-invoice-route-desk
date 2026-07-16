@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v84 daily summary duplicate cleanup.
+Current live app version: v85 paid status kept off printed summary.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
