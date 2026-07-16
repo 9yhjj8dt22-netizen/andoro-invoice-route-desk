@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=82",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=83",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -884,6 +884,10 @@ function scanDelivered(scan = {}) {
   return scan.delivered === true;
 }
 
+function scanPaid(scan = {}) {
+  return scan.paid === true;
+}
+
 function scanHasInvoice(scan = {}) {
   return Boolean(scan.savedInvoiceId || scan.number || Number(scan.total || scan.amount || scan.balanceDue || 0) || (scan.items || []).length || String(scan.itemsText || "").trim());
 }
@@ -1668,7 +1672,7 @@ function renderRouteDeliverySlots() {
     const stopNoteValue = scan?.routeNote || "";
     const selectedInvoiceId = scan?.savedInvoiceId || "";
     const scanStatus = scan
-      ? [`${scans.length} invoice${scans.length === 1 ? "" : "s"}`, scans.map((item) => item.number ? `#${item.number}` : scanLabel(item)).join(", "), scans.some(scanLisaHandled) ? "Ordered by office" : "Salesman order", scans.every(scanDelivered) ? "Delivered" : "Not delivered"].filter(Boolean).join(" - ")
+      ? [`${scans.length} invoice${scans.length === 1 ? "" : "s"}`, scans.map((item) => item.number ? `#${item.number}` : scanLabel(item)).join(", "), scans.some(scanLisaHandled) ? "Ordered by office" : "Salesman order", scans.every(scanDelivered) ? "Delivered" : "Not delivered", scans.every(scanPaid) ? "Paid" : "Unpaid"].filter(Boolean).join(" - ")
       : selectedStore ? "Store selected - no invoice attached yet." : "Select the store, then attach this stop's invoice.";
     const row = document.createElement("article");
     const officeOrdered = scan ? scanLisaHandled(scan) : Boolean(selectedStore?.orderBlocked);
@@ -1707,6 +1711,7 @@ function renderRouteDeliverySlots() {
               <label>Invoice ${invoiceIndex + 1} #<input data-scan-field="number" data-scan-id="${item.id}" value="${escapeAttribute(item.number || "")}" placeholder="Invoice number"></label>
               <label>Invoice ${invoiceIndex + 1} total<input data-scan-field="total" data-scan-id="${item.id}" type="number" step="0.01" value="${Number(item.total || item.amount || item.balanceDue || 0) || ""}" placeholder="0.00"></label>
               <label class="checkbox-label route-delivered-toggle route-delivered-summary-toggle"><input data-scan-delivered="${item.id}" type="checkbox" ${scanDelivered(item) ? "checked" : ""}> Delivered - count in summary</label>
+              <label class="checkbox-label route-paid-toggle route-paid-summary-toggle"><input data-scan-paid="${item.id}" type="checkbox" ${scanPaid(item) ? "checked" : ""}> Paid</label>
             </div>
           `).join("")}
           ${storeNotes ? `<div class="store-note-box"><strong>Store notes</strong><span>${escapeHtml(storeNotes)}</span></div>` : ""}
@@ -1735,8 +1740,9 @@ function renderRouteDayStatus() {
   const lisaCount = routeSlotScans().filter((scan) => scanLisaHandled(scan)).length;
   const invoiceCount = routeSlotScans().filter(scanHasInvoice).length;
   const deliveredCount = routeSlotScans().filter((scan) => scanDelivered(scan)).length;
+  const paidCount = routeSlotScans().filter((scan) => scanPaid(scan)).length;
   els.routeDayStatus.textContent = orderedCount
-    ? `${orderedCount} route stop${orderedCount === 1 ? "" : "s"} loaded, ${invoiceCount} with invoice, ${deliveredCount} delivered, ${lisaCount} ordered by office, ${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`
+    ? `${orderedCount} route stop${orderedCount === 1 ? "" : "s"} loaded, ${invoiceCount} with invoice, ${deliveredCount} delivered, ${paidCount} paid, ${lisaCount} ordered by office, ${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`
     : `${prospectCount} new account stop${prospectCount === 1 ? "" : "s"}`;
   if (!stops.length) {
     els.routeDayMapsLink.classList.add("disabled");
@@ -1836,6 +1842,7 @@ function parseInvoiceText(rawText, fileName, layout = null, zones = null) {
     importWarning: !matchedStore ? "Needs store match" : !invoiceNumber ? "Needs invoice number" : "",
     lisaHandled: Boolean(matchedStore?.orderBlocked),
     delivered: false,
+    paid: false,
     customerEmail: imported.customerEmail || "",
     address: imported.address || "",
     number: invoiceNumber,
@@ -2368,6 +2375,8 @@ function syncAllRouteInvoiceLineFields() {
     if (!scan) return;
     syncRouteInvoiceLineFields(delivered, scan);
     scan.delivered = delivered.checked;
+    const paid = line.querySelector("[data-scan-paid]");
+    scan.paid = Boolean(paid?.checked);
     scan.accepted = true;
   });
   saveState();
@@ -2399,9 +2408,10 @@ function routeSummaryHtml() {
     const invoice = routeInvoiceForScan(scan);
     const invoiceNumber = invoice?.number || scan.number || "";
     const delivered = scanDelivered(scan);
+    const paid = scanPaid(scan);
     const stopInvoiceTotal = routeInvoiceTotalForScan(scan);
     return `
-      <tr class="${delivered ? "" : "not-delivered"}">
+      <tr class="${delivered ? "" : "not-delivered"}${paid ? "" : " unpaid-stop"}">
         <td>${index + 1}</td>
         <td>
           <strong>${escapeHtml(storeName)}</strong>
@@ -2410,6 +2420,7 @@ function routeSummaryHtml() {
         <td>${escapeHtml(invoiceNumber)}</td>
         <td>${scanLisaHandled(scan) ? "Office" : "Salesman"}</td>
         <td><strong>${delivered ? "Delivered" : "Not delivered"}</strong></td>
+        <td><strong>${paid ? "Paid" : "Not paid"}</strong></td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
         <td class="note-cell">${escapeHtml(scan.routeNote || "")}</td>
       </tr>`;
@@ -2440,6 +2451,7 @@ function routeSummaryHtml() {
     .money { text-align: right; white-space: nowrap; }
     .not-delivered td { background: #fff1f1; }
     .not-delivered td:nth-child(5) { color: #9f1117; }
+    .unpaid-stop td:nth-child(6) { color: #9f1117; }
     @page { size: letter; margin: 0; }
     @media print {
       .preview-actions { display: none; }
@@ -2486,8 +2498,8 @@ function routeSummaryHtml() {
     <section class="notes">${escapeHtml(state.routeDay?.notes || "No general day notes.").replace(/\n/g, "<br>")}</section>
     <h2>Today's Route</h2>
     <table>
-      <thead><tr><th>Order</th><th>Store</th><th>Invoice #</th><th>Handled By</th><th>Delivered</th><th>Invoice Total</th><th>Notes</th></tr></thead>
-      <tbody>${stopRows || `<tr><td colspan="7">No route stops loaded.</td></tr>`}</tbody>
+      <thead><tr><th>Order</th><th>Store</th><th>Invoice #</th><th>Handled By</th><th>Delivered</th><th>Paid</th><th>Invoice Total</th><th>Notes</th></tr></thead>
+      <tbody>${stopRows || `<tr><td colspan="8">No route stops loaded.</td></tr>`}</tbody>
     </table>
     <h2>Gas / Expense Receipts</h2>
     <table>
@@ -3318,6 +3330,7 @@ function scanFromSavedInvoice(invoice, slot, store = invoiceStore(invoice)) {
     rawText: invoiceMessage(invoice),
     accepted: true,
     delivered: false,
+    paid: false,
     lisaHandled: Boolean(invoice.lisaHandled || store?.orderBlocked),
     matchedStoreId: store?.id || invoice.matchedStoreId || "",
     savedInvoiceId: invoice.id,
@@ -3778,6 +3791,19 @@ function attachEvents() {
       if (!scan) return;
       syncRouteInvoiceLineFields(event.target, scan);
       scan.delivered = event.target.checked;
+      scan.accepted = true;
+      saveState();
+      renderScans();
+      renderRouteDayStatus();
+      return;
+    }
+
+    const paidId = event.target.dataset.scanPaid;
+    if (paidId) {
+      const scan = state.scans.find((item) => item.id === paidId);
+      if (!scan) return;
+      syncRouteInvoiceLineFields(event.target, scan);
+      scan.paid = event.target.checked;
       scan.accepted = true;
       saveState();
       renderScans();
@@ -4696,6 +4722,7 @@ function placeholderScanForStore(store, slot) {
     rawText: "",
     accepted: true,
     delivered: false,
+    paid: false,
     lisaHandled: Boolean(store.orderBlocked),
     matchedStoreId: store.id,
     routeOrder: Number(slot),
@@ -4908,7 +4935,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=82";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=83";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
