@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=83",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=84",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -2382,14 +2382,51 @@ function syncAllRouteInvoiceLineFields() {
   saveState();
 }
 
+function routeSummaryStoreKey(scan = {}) {
+  const address = normalizedAddress(scan.address || "");
+  if (address) return `address:${address}`;
+  if (scan.matchedStoreId) return `store:${scan.matchedStoreId}`;
+  return `name:${normalizedName(cleanImportedCustomerName(scan.customer || "") || scan.customer || "unknown")}`;
+}
+
+function routeSummaryInvoiceKey(scan = {}) {
+  const storeKey = routeSummaryStoreKey(scan);
+  const number = String(scan.number || "").trim();
+  if (scan.savedInvoiceId) return `saved:${scan.savedInvoiceId}`;
+  if (number) return `number:${storeKey}:${number}`;
+  const total = routeInvoiceTotalForScan(scan);
+  return `manual:${storeKey}:${scan.id || ""}:${total}`;
+}
+
 function routeSummaryInvoiceScans() {
-  return routeSlotScans().filter((scan) => {
+  const summaryScans = routeSlotScans().filter((scan) => {
     const hasNumber = Boolean(String(scan.number || "").trim());
     const hasSavedInvoice = Boolean(scan.savedInvoiceId);
     const hasTotal = routeInvoiceTotalForScan(scan) > 0;
     const hasStopInfo = Boolean(scan.customer || scan.address || scan.routeNote);
     return hasNumber || hasSavedInvoice || hasTotal || hasStopInfo;
   });
+  const byStore = new Map();
+  summaryScans.forEach((scan) => {
+    const key = routeSummaryStoreKey(scan);
+    if (!byStore.has(key)) byStore.set(key, []);
+    byStore.get(key).push(scan);
+  });
+  const cleaned = [];
+  byStore.forEach((storeScans) => {
+    const hasDelivered = storeScans.some(scanDelivered);
+    const rows = hasDelivered && storeScans.length > 1
+      ? storeScans.filter(scanDelivered)
+      : storeScans;
+    const seenInvoices = new Set();
+    rows.forEach((scan) => {
+      const invoiceKey = routeSummaryInvoiceKey(scan);
+      if (seenInvoices.has(invoiceKey)) return;
+      seenInvoices.add(invoiceKey);
+      cleaned.push(scan);
+    });
+  });
+  return cleaned;
 }
 
 function routeSummaryHtml() {
@@ -4935,7 +4972,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=83";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=84";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
