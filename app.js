@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=79",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=80",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -398,6 +398,7 @@ const els = {
   clearRouteDay: document.querySelector("#clearRouteDay"),
   buildRoute: document.querySelector("#buildRoute"),
   printRouteSummary: document.querySelector("#printRouteSummary"),
+  saveRouteSummaryPdf: document.querySelector("#saveRouteSummaryPdf"),
   productSearch: document.querySelector("#productSearch"),
   productManagerList: document.querySelector("#productManagerList"),
   productManagerForm: document.querySelector("#productManagerForm"),
@@ -2433,10 +2434,11 @@ function routeSummaryHtml() {
     .money { text-align: right; white-space: nowrap; }
     .not-delivered td { background: #fff1f1; }
     .not-delivered td:nth-child(5) { color: #9f1117; }
-    @page { size: auto; margin: 0.25in; }
+    @page { size: letter; margin: 0; }
     @media print {
       .preview-actions { display: none; }
       a[href]::after { content: ""; }
+      body { margin: 0; }
       main { padding: 0.18in; max-width: none; }
       header { padding-bottom: 6px; }
       img { width: 104px; }
@@ -3486,7 +3488,7 @@ function clearRouteDay() {
   render();
 }
 
-function printRouteSummary() {
+function openRouteSummaryPrintView({ savePdf = false } = {}) {
   syncAllRouteInvoiceLineFields();
   const win = window.open("", "_blank");
   if (!win) {
@@ -3496,7 +3498,18 @@ function printRouteSummary() {
   win.document.write(routeSummaryHtml());
   win.document.close();
   win.focus();
+  if (savePdf) {
+    win.document.title = `Andoro Route Summary ${formatDate(routeDate())}`;
+  }
   win.print();
+}
+
+function printRouteSummary() {
+  openRouteSummaryPrintView();
+}
+
+function saveRouteSummaryPdf() {
+  openRouteSummaryPrintView({ savePdf: true });
 }
 
 function attachEvents() {
@@ -3562,6 +3575,7 @@ function attachEvents() {
   els.clearRouteDay.addEventListener("click", clearRouteDay);
   els.buildRoute.addEventListener("click", buildRouteFromDeliverySlots);
   els.printRouteSummary.addEventListener("click", printRouteSummary);
+  els.saveRouteSummaryPdf.addEventListener("click", saveRouteSummaryPdf);
 
   document.addEventListener("click", (event) => {
     const editInvoice = event.target.closest("[data-edit-invoice]");
@@ -4866,7 +4880,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=79";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=80";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

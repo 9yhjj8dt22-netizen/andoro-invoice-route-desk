@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "79";
+        const currentVersion = "80";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v79")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v80")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=79">
+    <link rel="stylesheet" href="styles.css?v=80">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -125,6 +125,7 @@
               <div class="control-row">
                 <button class="secondary-button" id="clearRouteDay" type="button">Clear route day</button>
                 <button class="secondary-button" id="printRouteSummary" type="button">Print summary</button>
+                <button class="secondary-button" id="saveRouteSummaryPdf" type="button">Save PDF</button>
                 <a class="map-link disabled" id="routeDayMapsLink" href="#" target="_blank" rel="noreferrer">Open in Google Maps</a>
               </div>
             </div>
@@ -758,9 +759,9 @@
       </div>
     </template>
 
-    <script src="assets/vendor/pdfjs/pdf.min.js?v=79"></script>
-    <script src="assets/vendor/tesseract/tesseract.min.js?v=79"></script>
-    <script src="app.js?v=79"></script>
+    <script src="assets/vendor/pdfjs/pdf.min.js?v=80"></script>
+    <script src="assets/vendor/tesseract/tesseract.min.js?v=80"></script>
+    <script src="app.js?v=80"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
