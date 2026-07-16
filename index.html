@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "80";
+        const currentVersion = "81";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v80")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v81")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=80">
+    <link rel="stylesheet" href="styles.css?v=81">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -415,7 +415,7 @@
               <div class="field-row">
                 <label>
                   Delivery fee
-                  <input id="deliveryFee" min="0" required step="0.01" type="number" value="10.00" placeholder="10.00">
+                  <input id="deliveryFee" min="0" required step="0.01" type="number" value="0.00" placeholder="0.00">
                 </label>
                 <label>
                   Customer total balance
@@ -759,9 +759,9 @@
       </div>
     </template>
 
-    <script src="assets/vendor/pdfjs/pdf.min.js?v=80"></script>
-    <script src="assets/vendor/tesseract/tesseract.min.js?v=80"></script>
-    <script src="app.js?v=80"></script>
+    <script src="assets/vendor/pdfjs/pdf.min.js?v=81"></script>
+    <script src="assets/vendor/tesseract/tesseract.min.js?v=81"></script>
+    <script src="app.js?v=81"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");

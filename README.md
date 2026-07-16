@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v80 route summary PDF button and tighter URL-free print page.
+Current live app version: v81 delivery fee defaults to zero unless manually entered.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

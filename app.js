@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=80",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=81",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -85,7 +85,7 @@ const delivery10 = catalogItem("Delivery Charge", "", 10);
 const delivery15 = catalogItem("Delivery Charge", "", 15);
 const PIZZAS_PER_CASE = 12;
 const CASES_PER_SHELF = 2;
-const DEFAULT_DELIVERY_FEE = 10;
+const DEFAULT_DELIVERY_FEE = 0;
 const DEFAULT_REP = "J.Ballew";
 const FIXED_ROUTE_ORIGIN = {
   address: "92 Produce Row, St. Louis, MO 63102",
@@ -1199,7 +1199,7 @@ function deliveryFeeFromItems(items = [], fallback = DEFAULT_DELIVERY_FEE) {
 }
 
 function storeDeliveryFee(store = selectedStore()) {
-  return store ? deliveryFeeFromItems(store.products || []) : DEFAULT_DELIVERY_FEE;
+  return store ? deliveryFeeFromItems(store.products || [], 0) : DEFAULT_DELIVERY_FEE;
 }
 
 function storeHasDefaultDeliveryFee(store = selectedStore()) {
@@ -2697,7 +2697,7 @@ function resetInvoiceForm() {
   els.issueDate.value = routeDate();
   els.invoiceTerms.value = "Net 10";
   els.invoiceRep.value = routeRep();
-  els.deliveryFee.value = "";
+  els.deliveryFee.value = "0.00";
   els.customerTotalBalance.value = "";
   els.invoiceTotal.value = "";
   els.paymentsCredits.value = "";
@@ -3136,7 +3136,7 @@ function loadSelectedStore() {
   els.invoiceDt.value = store.dt || "";
   els.specialInstructions.value = store.specialInstructions || "";
   if (!els.invoiceId.value) {
-    els.deliveryFee.value = storeDeliveryFee(store).toFixed(2);
+    els.deliveryFee.value = "0.00";
     els.lineItemsText.value = lineItemsToText(itemsWithDelivery(productsForStore(store).map((product) => ({
       description: product.description,
       upc: product.upc || "",
@@ -4880,7 +4880,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=80";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=81";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
