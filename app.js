@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=78",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=79",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -2385,7 +2385,7 @@ function routeSummaryHtml() {
       <td>${escapeHtml(receipt.name || "Receipt")}</td>
       <td>${escapeHtml(formatDate(receipt.date || routeDate()))}</td>
       <td class="money">${Number(receipt.amount || 0) ? money.format(Number(receipt.amount || 0)) : ""}</td>
-      <td>${escapeHtml(receipt.notes || "")}</td>
+      <td class="note-cell">${escapeHtml(receipt.notes || "")}</td>
     </tr>`).join("");
   const stopRows = stops.map((scan, index) => {
     const storeName = scan.customer || `Stop ${index + 1}`;
@@ -2404,7 +2404,7 @@ function routeSummaryHtml() {
         <td>${scanLisaHandled(scan) ? "Office" : "Salesman"}</td>
         <td><strong>${delivered ? "Delivered" : "Not delivered"}</strong></td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
-        <td>${escapeHtml(scan.routeNote || "")}</td>
+        <td class="note-cell">${escapeHtml(scan.routeNote || "")}</td>
       </tr>`;
   }).join("");
   return `<!doctype html>
@@ -2414,20 +2414,22 @@ function routeSummaryHtml() {
   <title>Andoro Route Summary</title>
   <style>
     body { font-family: Arial, sans-serif; color: #10251d; margin: 0; background: #fff; }
-    main { max-width: 8.5in; margin: 0 auto; padding: 0.35in; }
+    main { max-width: 8.5in; margin: 0 auto; padding: 0.3in; }
     .preview-actions { position: sticky; top: 0; z-index: 5; display: flex; justify-content: flex-end; padding: 10px; background: #fff; border-bottom: 1px solid #ddd; }
     .preview-actions button { border: 0; border-radius: 8px; background: #d71920; color: #111; font-weight: 900; padding: 10px 16px; cursor: pointer; }
-    header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #176b4d; padding-bottom: 14px; gap: 18px; }
-    img { width: 150px; height: auto; }
-    h1 { margin: 0; font-size: 30px; color: #0d3326; }
-    .meta { text-align: right; line-height: 1.5; font-weight: 700; }
-    .total { margin: 18px 0; padding: 14px; border: 2px solid #176b4d; display: flex; justify-content: space-between; font-size: 22px; font-weight: 900; }
-    h2 { margin: 22px 0 8px; font-size: 18px; color: #0d3326; }
-    .notes { border: 1px solid #176b4d; padding: 12px; min-height: 86px; line-height: 1.5; }
+    header { display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #176b4d; padding-bottom: 12px; gap: 16px; }
+    img { width: 136px; height: auto; }
+    h1 { margin: 0; font-size: 26px; color: #0d3326; }
+    .meta { text-align: right; line-height: 1.35; font-size: 12px; font-weight: 700; }
+    .total { margin: 14px 0; padding: 11px 12px; border: 2px solid #176b4d; display: flex; justify-content: space-between; font-size: 19px; font-weight: 900; }
+    h2 { margin: 16px 0 6px; font-size: 15px; color: #0d3326; }
+    .notes { border: 1px solid #176b4d; padding: 9px; min-height: 70px; line-height: 1.35; font-size: 10.5px; }
     table { width: 100%; border-collapse: collapse; }
     th { background: #b9d6c4; color: #0d3326; text-align: left; }
-    th, td { border: 1px solid #176b4d; padding: 8px; vertical-align: top; }
-    td span { display: block; color: #4d6158; margin-top: 3px; }
+    th, td { border: 1px solid #176b4d; padding: 6px; vertical-align: top; font-size: 11px; }
+    th { font-size: 10.5px; }
+    td span { display: block; color: #4d6158; margin-top: 2px; font-size: 9.5px; }
+    .note-cell { color: #203b31; font-size: 9.5px; line-height: 1.25; }
     .money { text-align: right; white-space: nowrap; }
     .not-delivered td { background: #fff1f1; }
     .not-delivered td:nth-child(5) { color: #9f1117; }
@@ -2435,14 +2437,18 @@ function routeSummaryHtml() {
     @media print {
       .preview-actions { display: none; }
       a[href]::after { content: ""; }
-      main { padding: 0.22in; max-width: none; }
-      header { padding-bottom: 8px; }
-      img { width: 118px; }
-      h1 { font-size: 24px; }
-      h2 { margin: 14px 0 6px; font-size: 15px; }
-      .total { margin: 12px 0; padding: 10px; font-size: 18px; }
-      .notes { min-height: 92px; }
-      th, td { padding: 5px; font-size: 10.5px; }
+      main { padding: 0.18in; max-width: none; }
+      header { padding-bottom: 6px; }
+      img { width: 104px; }
+      h1 { font-size: 21px; }
+      .meta { font-size: 9.5px; line-height: 1.25; }
+      h2 { margin: 10px 0 4px; font-size: 12.5px; }
+      .total { margin: 8px 0; padding: 7px 9px; font-size: 15px; }
+      .notes { min-height: 64px; padding: 7px; font-size: 8.8px; line-height: 1.22; }
+      th, td { padding: 3.5px 4px; font-size: 8.8px; }
+      th { font-size: 8.6px; }
+      td span { font-size: 7.8px; }
+      .note-cell { font-size: 7.7px; line-height: 1.18; }
       tr { break-inside: avoid; page-break-inside: avoid; }
     }
   </style>
@@ -4860,7 +4866,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=78";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=79";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

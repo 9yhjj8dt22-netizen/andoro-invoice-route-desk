@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v78 hides home details and app-controlled URLs from print views.
+Current live app version: v79 smaller professional route summary print layout.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
