@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=81",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=82",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -1405,7 +1405,7 @@ function renderInvoices() {
   els.invoiceTable.replaceChildren();
   if (!rows.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td colspan="7"><div class="empty-state"><strong>No invoices found</strong><span>Add or scan invoices to fill the ledger.</span></div></td>`;
+    tr.innerHTML = `<td colspan="8"><div class="empty-state"><strong>No invoices found</strong><span>Add or scan invoices to fill the ledger.</span></div></td>`;
     els.invoiceTable.append(tr);
     return;
   }
@@ -1417,6 +1417,12 @@ function renderInvoices() {
       <td>${formatDate(invoiceDate(invoice))}</td>
       <td>${escapeHtml(invoice.terms || "")}</td>
       <td class="align-right">${money.format(invoiceBalance(invoice))}</td>
+      <td>
+        <label class="checkbox-label office-sent-label">
+          <input data-office-sent="${invoice.id}" type="checkbox" ${invoice.officeSent ? "checked" : ""}>
+          ${invoice.officeSent ? "Sent" : "Not sent"}
+        </label>
+      </td>
       <td><div class="row-actions">
         <button class="icon-action" data-email-invoice="${invoice.id}" type="button">Customer</button>
         <button class="icon-action" data-office-invoice="${invoice.id}" type="button">Office</button>
@@ -3207,6 +3213,7 @@ function validateRequiredOrderFields() {
 }
 
 function invoiceFromForm() {
+  const existing = state.invoices.find((item) => item.id === els.invoiceId.value);
   const items = itemsWithDelivery(lineItemsFromText(els.lineItemsText.value));
   const computedTotal = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const enteredTotal = Number(els.invoiceTotal.value || els.invoiceAmount.value || 0);
@@ -3236,7 +3243,9 @@ function invoiceFromForm() {
     totalOverride: true,
     paymentsCredits: Number(els.paymentsCredits.value || 0),
     balanceDue,
-    customerSignature: getSignatureData()
+    customerSignature: getSignatureData(),
+    officeSent: Boolean(existing?.officeSent),
+    officeSentAt: existing?.officeSentAt || ""
   };
 }
 
@@ -3730,6 +3739,12 @@ function attachEvents() {
       return;
     }
 
+    const officeSentId = event.target.dataset.officeSent;
+    if (officeSentId) {
+      setInvoiceOfficeSent(officeSentId, event.target.checked);
+      return;
+    }
+
     const storeScanId = event.target.dataset.scanStore;
     if (storeScanId) {
       const scan = state.scans.find((item) => item.id === storeScanId);
@@ -3845,6 +3860,15 @@ function emailOfficeById(id) {
   const invoice = state.invoices.find((item) => item.id === id);
   if (invoiceBlocksOrders(invoice) && blockOrderAction(invoiceStore(invoice))) return;
   if (invoice) emailOffice(invoice);
+}
+
+function setInvoiceOfficeSent(id, sent) {
+  const invoice = state.invoices.find((item) => item.id === id);
+  if (!invoice) return;
+  invoice.officeSent = Boolean(sent);
+  invoice.officeSentAt = sent ? new Date().toISOString() : "";
+  saveState();
+  renderInvoices();
 }
 
 async function shareInvoiceById(id) {
@@ -3976,6 +4000,10 @@ function emailOffice(invoice) {
     subject: invoiceSubject(invoice),
     body: invoiceMessage(invoice)
   });
+  invoice.officeSent = true;
+  invoice.officeSentAt = new Date().toISOString();
+  saveState();
+  renderInvoices();
   window.location.href = `mailto:${recipients.map(encodeURIComponent).join(",")}?${params.toString()}`;
 }
 
@@ -4880,7 +4908,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=81";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=82";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
