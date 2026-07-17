@@ -899,6 +899,13 @@ th {
   min-height: 46px;
 }
 
+.route-slot-invoice-line .route-voice-entry-button {
+  grid-column: 1 / -1;
+  min-height: 48px;
+  font-size: 1rem;
+  font-weight: 900;
+}
+
 .route-slot-invoice-line .route-delivered-summary-toggle input,
 .route-slot-invoice-line .route-paid-summary-toggle input {
   width: 22px;

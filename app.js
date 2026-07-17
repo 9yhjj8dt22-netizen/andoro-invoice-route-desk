@@ -4,11 +4,12 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=85",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=86",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
 };
+let voiceEntryActive = false;
 const TAB_HEADERS = {
   invoices: "Check Store Needs - Build Order - Get Signature - Print / Share",
   scan: "Route Organizer / Summary",
@@ -1712,6 +1713,7 @@ function renderRouteDeliverySlots() {
               <label>Invoice ${invoiceIndex + 1} total<input data-scan-field="total" data-scan-id="${item.id}" type="number" step="0.01" value="${Number(item.total || item.amount || item.balanceDue || 0) || ""}" placeholder="0.00"></label>
               <label class="checkbox-label route-delivered-toggle route-delivered-summary-toggle"><input data-scan-delivered="${item.id}" type="checkbox" ${scanDelivered(item) ? "checked" : ""}> Delivered - count in summary</label>
               <label class="checkbox-label route-paid-toggle route-paid-summary-toggle"><input data-scan-paid="${item.id}" type="checkbox" ${scanPaid(item) ? "checked" : ""}> Paid</label>
+              <button class="secondary-button route-voice-entry-button" data-voice-route-entry="${item.id}" type="button">Voice Entry</button>
             </div>
           `).join("")}
           ${storeNotes ? `<div class="store-note-box"><strong>Store notes</strong><span>${escapeHtml(storeNotes)}</span></div>` : ""}
@@ -2380,6 +2382,206 @@ function syncAllRouteInvoiceLineFields() {
     scan.accepted = true;
   });
   saveState();
+}
+
+function speechRecognitionConstructor() {
+  return window.SpeechRecognition || window.webkitSpeechRecognition || null;
+}
+
+function speakVoice(text) {
+  return new Promise((resolve) => {
+    if (!("speechSynthesis" in window)) {
+      resolve();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.95;
+    utterance.onend = resolve;
+    utterance.onerror = resolve;
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
+async function listenForVoice(promptText) {
+  const Recognition = speechRecognitionConstructor();
+  if (!Recognition) throw new Error("Speech recognition is not available on this browser.");
+  await speakVoice(promptText);
+  return new Promise((resolve, reject) => {
+    const recognition = new Recognition();
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      try {
+        recognition.stop();
+      } catch (error) {
+        // Some browsers throw if recognition already ended.
+      }
+      resolve(value);
+    };
+    const fail = (message) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      try {
+        recognition.stop();
+      } catch (error) {
+        // Some browsers throw if recognition already ended.
+      }
+      reject(new Error(message));
+    };
+    const timeoutId = setTimeout(() => finish(""), 12000);
+    recognition.lang = "en-US";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.onresult = (event) => finish(event.results?.[0]?.[0]?.transcript || "");
+    recognition.onerror = (event) => {
+      if (event.error === "no-speech") finish("");
+      else fail(event.error || "Voice entry failed.");
+    };
+    recognition.onend = () => finish("");
+    recognition.start();
+  });
+}
+
+function voiceTextIsSkip(text = "") {
+  return /\b(skip|keep|same|no change)\b/i.test(text);
+}
+
+function wordsToNumber(text = "") {
+  const small = {
+    zero: 0, oh: 0, one: 1, two: 2, to: 2, too: 2, three: 3, four: 4, for: 4, five: 5,
+    six: 6, seven: 7, eight: 8, ate: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+    thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19
+  };
+  const tens = { twenty: 20, thirty: 30, forty: 40, fourty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+  const tokens = String(text).toLowerCase().replace(/-/g, " ").match(/[a-z]+|\d+/g) || [];
+  let total = 0;
+  let current = 0;
+  let found = false;
+  tokens.forEach((token) => {
+    if (/^\d+$/.test(token)) {
+      current += Number(token);
+      found = true;
+    } else if (small[token] !== undefined) {
+      current += small[token];
+      found = true;
+    } else if (tens[token] !== undefined) {
+      current += tens[token];
+      found = true;
+    } else if (token === "hundred") {
+      current = Math.max(current, 1) * 100;
+      found = true;
+    } else if (token === "thousand") {
+      total += Math.max(current, 1) * 1000;
+      current = 0;
+      found = true;
+    }
+  });
+  return found ? total + current : null;
+}
+
+function parseVoiceInvoiceNumber(text = "") {
+  const digitWords = { zero: "0", oh: "0", one: "1", two: "2", to: "2", too: "2", three: "3", four: "4", for: "4", five: "5", six: "6", seven: "7", eight: "8", ate: "8", nine: "9" };
+  const directDigits = String(text).match(/\d+/g);
+  if (directDigits?.length) return directDigits.join("");
+  const digits = (String(text).toLowerCase().match(/[a-z]+/g) || []).map((word) => digitWords[word]).filter((value) => value !== undefined);
+  if (digits.length) return digits.join("");
+  const number = wordsToNumber(text);
+  return number !== null ? String(number) : "";
+}
+
+function parseVoiceMoney(text = "") {
+  const cleaned = String(text).toLowerCase().replace(/,/g, "");
+  const pointMatch = cleaned.match(/^(.+?)\s+point\s+(.+)$/);
+  if (pointMatch) {
+    const dollars = Number(cleaned.match(/\d+/)?.[0] || wordsToNumber(pointMatch[1]) || 0);
+    const centsDigits = parseVoiceInvoiceNumber(pointMatch[2]).slice(0, 2).padEnd(2, "0");
+    return Number(`${dollars}.${centsDigits}`);
+  }
+  const numericGroups = cleaned.match(/\d+(?:\.\d{1,2})?/g);
+  if (numericGroups?.length) {
+    if (numericGroups[0].includes(".")) return Number(Number(numericGroups[0]).toFixed(2));
+    if (numericGroups.length > 1) return Number(`${Number(numericGroups[0])}.${String(numericGroups[1]).slice(0, 2).padEnd(2, "0")}`);
+    return Number(Number(numericGroups[0]).toFixed(2));
+  }
+  const dollarsText = cleaned.split(/\bdollars?\b/)[0] || cleaned;
+  const centsText = cleaned.match(/\bdollars?\b(.+?)\bcents?\b/)?.[1] || cleaned.match(/\band\b(.+?)\bcents?\b/)?.[1] || "";
+  const dollars = wordsToNumber(dollarsText);
+  const cents = centsText ? wordsToNumber(centsText) : null;
+  if (dollars === null && cents === null) return null;
+  return Number(((dollars || 0) + (cents || 0) / 100).toFixed(2));
+}
+
+function parseVoiceYesNo(text = "") {
+  const value = String(text).toLowerCase();
+  if (/\b(no|not|nope|negative|undelivered|unpaid)\b/.test(value)) return false;
+  if (/\b(yes|yeah|yep|delivered|paid|correct|true)\b/.test(value)) return true;
+  return null;
+}
+
+async function voiceEntryForScan(id) {
+  const scan = state.scans.find((item) => item.id === id);
+  if (!scan) return;
+  if (voiceEntryActive) {
+    alert("Voice Entry is already running.");
+    return;
+  }
+  if (!speechRecognitionConstructor()) {
+    alert("Voice Entry is not available in this browser. Try Safari or Chrome and allow microphone access.");
+    return;
+  }
+  voiceEntryActive = true;
+  try {
+    const storeName = scan.customer || "this stop";
+    await speakVoice(`Voice entry for ${storeName}. Say skip on any field to keep what is already there.`);
+    const numberText = await listenForVoice("Invoice number. Say each digit one at a time, or say skip.");
+    const totalText = await listenForVoice("Invoice total. Say the dollars and cents, or say skip.");
+    const deliveredText = await listenForVoice("Delivered? Say yes, no, or skip.");
+    const paidText = await listenForVoice("Paid? Say yes, no, or skip.");
+    const notesText = await listenForVoice("Stop notes. Say your note, or say skip.");
+    const next = {
+      number: voiceTextIsSkip(numberText) || !numberText ? scan.number || "" : parseVoiceInvoiceNumber(numberText),
+      total: voiceTextIsSkip(totalText) || !totalText ? routeInvoiceTotalForScan(scan) : parseVoiceMoney(totalText),
+      delivered: voiceTextIsSkip(deliveredText) || !deliveredText ? scanDelivered(scan) : parseVoiceYesNo(deliveredText),
+      paid: voiceTextIsSkip(paidText) || !paidText ? scanPaid(scan) : parseVoiceYesNo(paidText),
+      routeNote: voiceTextIsSkip(notesText) || !notesText ? scan.routeNote || "" : notesText.trim()
+    };
+    if (next.total === null) next.total = routeInvoiceTotalForScan(scan);
+    if (next.delivered === null) next.delivered = scanDelivered(scan);
+    if (next.paid === null) next.paid = scanPaid(scan);
+    const readback = [
+      `Store: ${storeName}`,
+      `Invoice number: ${next.number || "blank"}`,
+      `Invoice total: ${money.format(Number(next.total || 0))}`,
+      `Delivered: ${next.delivered ? "yes" : "no"}`,
+      `Paid: ${next.paid ? "yes" : "no"}`,
+      `Notes: ${next.routeNote || "none"}`
+    ].join("\n");
+    await speakVoice(`I heard invoice ${next.number || "blank"}, total ${money.format(Number(next.total || 0))}, delivered ${next.delivered ? "yes" : "no"}, paid ${next.paid ? "yes" : "no"}. Check the screen and confirm to save.`);
+    if (!confirm(`Save this voice entry?\n\n${readback}`)) return;
+    scan.number = next.number;
+    scan.total = Number(next.total || 0);
+    scan.amount = Number(next.total || 0);
+    scan.balanceDue = Number(next.total || 0);
+    scan.customerTotalBalance = Number(next.total || 0);
+    scan.delivered = Boolean(next.delivered);
+    scan.paid = Boolean(next.paid);
+    scan.routeNote = next.routeNote;
+    scan.accepted = true;
+    saveState();
+    renderScans();
+    renderRouteDayCapture();
+    renderRouteDayStatus();
+    await speakVoice("Saved.");
+  } catch (error) {
+    alert(error.message || "Voice Entry could not finish.");
+  } finally {
+    voiceEntryActive = false;
+  }
 }
 
 function routeSummaryStoreKey(scan = {}) {
@@ -3651,6 +3853,7 @@ function attachEvents() {
     const clearRouteSlot = event.target.closest("[data-clear-route-slot]");
     const attachRouteInvoice = event.target.closest("[data-attach-route-invoice]");
     const addManualRouteInvoice = event.target.closest("[data-add-manual-route-invoice]");
+    const voiceRouteEntry = event.target.closest("[data-voice-route-entry]");
     const routeSlotUp = event.target.closest("[data-route-slot-up]");
     const routeSlotDown = event.target.closest("[data-route-slot-down]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
@@ -3681,6 +3884,10 @@ function attachEvents() {
     }
     if (addManualRouteInvoice) {
       addManualInvoiceToRouteSlot(addManualRouteInvoice.dataset.addManualRouteInvoice);
+      return;
+    }
+    if (voiceRouteEntry) {
+      voiceEntryForScan(voiceRouteEntry.dataset.voiceRouteEntry);
       return;
     }
     if (routeSlotUp) {
@@ -4969,7 +5176,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=85";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=86";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

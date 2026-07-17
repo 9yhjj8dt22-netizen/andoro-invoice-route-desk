@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v85 paid status kept off printed summary.
+Current live app version: v86 voice entry for route stops.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
