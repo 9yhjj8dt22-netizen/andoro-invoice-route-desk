@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=86",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=87",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -2747,6 +2747,206 @@ function routeSummaryHtml() {
 </html>`;
 }
 
+function pdfSafeText(value = "") {
+  return String(value)
+    .normalize("NFKD")
+    .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function pdfEscapeString(value = "") {
+  return pdfSafeText(value).replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+}
+
+function wrapPdfText(value = "", maxWidth = 120, fontSize = 8) {
+  const words = pdfSafeText(value).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let line = "";
+  const averageWidth = fontSize * 0.52;
+  const maxChars = Math.max(8, Math.floor(maxWidth / averageWidth));
+  words.forEach((word) => {
+    const next = line ? `${line} ${word}` : word;
+    if (next.length > maxChars && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = next;
+    }
+  });
+  if (line) lines.push(line);
+  return lines.length ? lines : [""];
+}
+
+function routeSummaryPdfFileName() {
+  return `andoro-route-summary-${routeDate()}.pdf`;
+}
+
+function buildPdfDocument(pageStreams) {
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    `<< /Type /Pages /Kids [${pageStreams.map((_, index) => `${5 + index * 2} 0 R`).join(" ")}] /Count ${pageStreams.length} >>`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>"
+  ];
+  pageStreams.forEach((stream, index) => {
+    const pageObject = 5 + index * 2;
+    const streamObject = pageObject + 1;
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${streamObject} 0 R >>`);
+    objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
+  });
+  let pdf = "%PDF-1.4\n%Andoro\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  offsets.slice(1).forEach((offset) => {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+  });
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return new Blob([pdf], { type: "application/pdf" });
+}
+
+function buildRouteSummaryPdfBlob() {
+  const width = 612;
+  const height = 792;
+  const margin = 36;
+  const tableWidth = width - margin * 2;
+  const pages = [];
+  let ops = [];
+  let y = height - margin;
+
+  const color = (r, g, b) => `${r} ${g} ${b}`;
+  const drawText = (text, x, textY, size = 9, font = "F1", fill = "0 0 0") => {
+    ops.push(`${fill} rg BT /${font} ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${textY.toFixed(2)} Tm (${pdfEscapeString(text)}) Tj ET`);
+  };
+  const drawLine = (x1, y1, x2, y2, stroke = color(0.09, 0.42, 0.30), lineWidth = 1) => {
+    ops.push(`${stroke} RG ${lineWidth} w ${x1.toFixed(2)} ${y1.toFixed(2)} m ${x2.toFixed(2)} ${y2.toFixed(2)} l S`);
+  };
+  const drawRect = (x, bottomY, rectWidth, rectHeight, stroke = color(0.09, 0.42, 0.30), fill = "") => {
+    if (fill) ops.push(`${fill} rg ${x.toFixed(2)} ${bottomY.toFixed(2)} ${rectWidth.toFixed(2)} ${rectHeight.toFixed(2)} re f`);
+    ops.push(`${stroke} RG 0.75 w ${x.toFixed(2)} ${bottomY.toFixed(2)} ${rectWidth.toFixed(2)} ${rectHeight.toFixed(2)} re S`);
+  };
+  const addPage = () => {
+    if (ops.length) pages.push(ops.join("\n"));
+    ops = [];
+    y = height - margin;
+    drawText("Andoro & Sons Pizza", margin, y - 4, 14, "F2", color(0.08, 0.36, 0.27));
+    drawText("Route Summary", 225, y - 4, 18, "F2", color(0.05, 0.20, 0.15));
+    drawText(formatDate(routeDate()), 475, y - 2, 9, "F2", color(0.05, 0.20, 0.15));
+    drawText(`Rep: ${routeRep()}`, 475, y - 15, 8, "F2", color(0.05, 0.20, 0.15));
+    drawText(`Route start: ${state.routeDay?.startTime || ""}`, 475, y - 28, 8);
+    drawText(`Route finish: ${state.routeDay?.finishTime || ""}`, 475, y - 41, 8);
+    drawLine(margin, y - 58, width - margin, y - 58);
+    y -= 78;
+  };
+  const ensureSpace = (needed) => {
+    if (y - needed < margin) addPage();
+  };
+  const drawSectionTitle = (title) => {
+    ensureSpace(22);
+    drawText(title, margin, y, 12, "F2", color(0.05, 0.20, 0.15));
+    y -= 16;
+  };
+  const drawWrappedBlock = (text, minHeight = 46) => {
+    const lines = wrapPdfText(text || "No general day notes.", tableWidth - 12, 8);
+    const blockHeight = Math.max(minHeight, 14 + lines.length * 10);
+    ensureSpace(blockHeight + 6);
+    drawRect(margin, y - blockHeight, tableWidth, blockHeight);
+    lines.forEach((line, index) => drawText(line, margin + 6, y - 13 - index * 10, 8));
+    y -= blockHeight + 12;
+  };
+  const drawTableHeader = (headers, columns) => {
+    ensureSpace(22);
+    let x = margin;
+    columns.forEach((column, index) => {
+      drawRect(x, y - 18, column, 18, color(0.09, 0.42, 0.30), color(0.73, 0.84, 0.77));
+      drawText(headers[index], x + 4, y - 12, 7.5, "F2", color(0.05, 0.20, 0.15));
+      x += column;
+    });
+    y -= 18;
+  };
+  const drawTableRow = (cells, columns, options = {}) => {
+    const cellLines = cells.map((cell, index) => wrapPdfText(cell, columns[index] - 8, index === cells.length - 1 ? 7 : 7.5));
+    const maxLines = Math.max(...cellLines.map((lines) => lines.length));
+    const rowHeight = Math.max(20, 10 + maxLines * 9);
+    ensureSpace(rowHeight);
+    let x = margin;
+    columns.forEach((column, index) => {
+      drawRect(x, y - rowHeight, column, rowHeight, color(0.09, 0.42, 0.30), options.notDelivered ? color(1, 0.95, 0.95) : "");
+      cellLines[index].slice(0, Math.floor((rowHeight - 6) / 9)).forEach((line, lineIndex) => {
+        const font = index === 1 && lineIndex === 0 ? "F2" : "F1";
+        const fill = options.notDelivered && index === 4 ? color(0.62, 0.07, 0.09) : "0 0 0";
+        drawText(line, x + 4, y - 11 - lineIndex * 9, index === cells.length - 1 ? 7 : 7.5, font, fill);
+      });
+      x += column;
+    });
+    y -= rowHeight;
+  };
+
+  addPage();
+  drawRect(margin, y - 24, tableWidth, 24, color(0.09, 0.42, 0.30), "");
+  drawText("Day Invoice Total", margin + 8, y - 16, 12, "F2", color(0.05, 0.20, 0.15));
+  drawText(money.format(routeDayTotal()), width - margin - 92, y - 16, 12, "F2", color(0.05, 0.20, 0.15));
+  y -= 40;
+  drawSectionTitle("Day Notes");
+  drawWrappedBlock(state.routeDay?.notes || "No general day notes.", 48);
+  drawSectionTitle("Today's Route");
+  const routeColumns = [26, 116, 54, 48, 58, 64, 174];
+  drawTableHeader(["Order", "Store", "Invoice #", "By", "Delivered", "Total", "Notes"], routeColumns);
+  const stops = routeSummaryInvoiceScans();
+  if (!stops.length) {
+    drawTableRow(["", "No route stops loaded.", "", "", "", "", ""], routeColumns);
+  } else {
+    stops.forEach((scan, index) => {
+      const invoice = routeInvoiceForScan(scan);
+      const delivered = scanDelivered(scan);
+      drawTableRow([
+        String(index + 1),
+        [scan.customer || `Stop ${index + 1}`, scan.address || ""].filter(Boolean).join(" - "),
+        invoice?.number || scan.number || "",
+        scanLisaHandled(scan) ? "Office" : "Salesman",
+        delivered ? "Delivered" : "Not delivered",
+        money.format(routeInvoiceTotalForScan(scan)),
+        scan.routeNote || ""
+      ], routeColumns, { notDelivered: !delivered });
+    });
+  }
+  drawSectionTitle("Gas / Expense Receipts");
+  const receiptColumns = [26, 176, 70, 64, 204];
+  drawTableHeader(["#", "Expense / Receipt", "Date Added", "Amount", "Notes"], receiptColumns);
+  const receipts = state.routeDay?.receipts || [];
+  if (!receipts.length) {
+    drawTableRow(["", "No expenses recorded.", "", "", ""], receiptColumns);
+  } else {
+    receipts.forEach((receipt, index) => {
+      drawTableRow([
+        String(index + 1),
+        receipt.name || "Receipt",
+        formatDate(receipt.date || routeDate()),
+        Number(receipt.amount || 0) ? money.format(Number(receipt.amount || 0)) : "",
+        receipt.notes || ""
+      ], receiptColumns);
+    });
+  }
+  pages.push(ops.join("\n"));
+  return buildPdfDocument(pages);
+}
+
+function downloadBlob(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
 function formatDate(value) {
   return value ? dateFormat.format(new Date(`${value}T00:00:00`)) : "No date";
 }
@@ -3746,7 +3946,7 @@ function clearRouteDay() {
   render();
 }
 
-function openRouteSummaryPrintView({ savePdf = false } = {}) {
+function openRouteSummaryPrintView() {
   syncAllRouteInvoiceLineFields();
   const win = window.open("", "_blank");
   if (!win) {
@@ -3756,9 +3956,6 @@ function openRouteSummaryPrintView({ savePdf = false } = {}) {
   win.document.write(routeSummaryHtml());
   win.document.close();
   win.focus();
-  if (savePdf) {
-    win.document.title = `Andoro Route Summary ${formatDate(routeDate())}`;
-  }
   win.print();
 }
 
@@ -3767,7 +3964,8 @@ function printRouteSummary() {
 }
 
 function saveRouteSummaryPdf() {
-  openRouteSummaryPrintView({ savePdf: true });
+  syncAllRouteInvoiceLineFields();
+  downloadBlob(buildRouteSummaryPdfBlob(), routeSummaryPdfFileName());
 }
 
 function attachEvents() {
@@ -5176,7 +5374,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=86";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=87";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
