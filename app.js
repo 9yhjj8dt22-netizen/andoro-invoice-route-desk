@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=89",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=90",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -292,6 +292,8 @@ const els = {
   storeManagerBlocked: document.querySelector("#storeManagerBlocked"),
   storeManagerBlockedReason: document.querySelector("#storeManagerBlockedReason"),
   storeManagerProducts: document.querySelector("#storeManagerProducts"),
+  storeFacingList: document.querySelector("#storeFacingList"),
+  addStoreFacing: document.querySelector("#addStoreFacing"),
   storeManagerShelfInfo: document.querySelector("#storeManagerShelfInfo"),
   tagStoreLocation: document.querySelector("#tagStoreLocation"),
   checkStoreAddresses: document.querySelector("#checkStoreAddresses"),
@@ -1019,6 +1021,7 @@ function mergeStores(baseStores = [], incomingStores = []) {
       lat: hasOwn(store, "lat") ? Number(store.lat || 0) : Number(existing.lat || 0),
       lng: hasOwn(store, "lng") ? Number(store.lng || 0) : Number(existing.lng || 0),
       shelfInfo: hasOwn(store, "shelfInfo") ? store.shelfInfo || "" : existing.shelfInfo || "",
+      facings: hasOwn(store, "facings") ? normalizeStoreFacings(store.facings || []) : normalizeStoreFacings(existing.facings || []),
       products: incomingProducts ? mergeProducts([], store.products || []) : mergeProducts(existing.products || [], [])
     };
     if (existingIndex >= 0) stores[existingIndex] = merged;
@@ -3326,6 +3329,102 @@ function storeProductsFromText(text = "") {
   }).filter(Boolean);
 }
 
+function normalizeStoreFacing(facing = {}, index = 0) {
+  return {
+    id: facing.id || crypto.randomUUID(),
+    spot: String(facing.spot || facing.position || index + 1).trim(),
+    productKey: String(facing.productKey || "").trim(),
+    flavor: String(facing.flavor || facing.product || facing.description || "").trim(),
+    location: String(facing.location || facing.shelf || "").trim(),
+    notes: String(facing.notes || "").trim()
+  };
+}
+
+function normalizeStoreFacings(facings = []) {
+  return (facings || [])
+    .map(normalizeStoreFacing)
+    .filter((facing) => facing.spot || facing.flavor || facing.location || facing.notes);
+}
+
+function facingsFromStoreProducts(products = []) {
+  return (products || [])
+    .filter((product) => !isDeliveryItem(product) && String(product.facings || "").trim())
+    .map((product, index) => normalizeStoreFacing({
+      spot: String(index + 1),
+      productKey: productKey(product),
+      flavor: product.description || "",
+      location: "",
+      notes: `Facings: ${product.facings}`
+    }, index));
+}
+
+function facingsForStore(store = {}) {
+  const structured = normalizeStoreFacings(store.facings || []);
+  return structured.length ? structured : facingsFromStoreProducts(store.products || []);
+}
+
+function facingProductOptions(selectedKey = "") {
+  const products = masterProducts().filter((product) => !isDeliveryItem(product));
+  return [
+    `<option value="">Select flavor/product</option>`,
+    ...products.map((product) => {
+      const key = productKey(product);
+      return `<option value="${escapeAttribute(key)}" data-facing-description="${escapeAttribute(product.description)}" ${key === selectedKey ? "selected" : ""}>${escapeHtml(product.description)}</option>`;
+    })
+  ].join("");
+}
+
+function renderStoreFacingTracker(facings = []) {
+  if (!els.storeFacingList) return;
+  const rows = normalizeStoreFacings(facings);
+  els.storeFacingList.replaceChildren();
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state compact-empty";
+    empty.innerHTML = "<strong>No facings tracked yet</strong><span>Add each spot, flavor, and shelf location for this store.</span>";
+    els.storeFacingList.append(empty);
+    return;
+  }
+  rows.forEach((facing, index) => {
+    const row = document.createElement("div");
+    row.className = "store-facing-row";
+    row.dataset.facingId = facing.id;
+    row.innerHTML = `
+      <label>Spot<input data-facing-field="spot" value="${escapeAttribute(facing.spot || index + 1)}" placeholder="1"></label>
+      <label>Flavor / product<select data-facing-field="productKey">${facingProductOptions(facing.productKey)}</select></label>
+      <label>Flavor text<input data-facing-field="flavor" value="${escapeAttribute(facing.flavor)}" placeholder="Pepperoni 12&quot;"></label>
+      <label>Location<input data-facing-field="location" value="${escapeAttribute(facing.location)}" placeholder="Door 3, top shelf"></label>
+      <label>Notes<input data-facing-field="notes" value="${escapeAttribute(facing.notes)}" placeholder="End cap, low mover, etc."></label>
+      <button class="ghost-button" data-delete-facing="${escapeAttribute(facing.id)}" type="button">Remove</button>
+    `;
+    els.storeFacingList.append(row);
+  });
+}
+
+function storeFacingsFromForm() {
+  if (!els.storeFacingList) return [];
+  return [...els.storeFacingList.querySelectorAll(".store-facing-row")].map((row, index) => {
+    const valueFor = (field) => row.querySelector(`[data-facing-field="${field}"]`)?.value || "";
+    return normalizeStoreFacing({
+      id: row.dataset.facingId || crypto.randomUUID(),
+      spot: valueFor("spot") || String(index + 1),
+      productKey: valueFor("productKey"),
+      flavor: valueFor("flavor"),
+      location: valueFor("location"),
+      notes: valueFor("notes")
+    }, index);
+  });
+}
+
+function addStoreFacingRow(facing = {}) {
+  const facings = storeFacingsFromForm();
+  facings.push(normalizeStoreFacing({
+    spot: String(facings.length + 1),
+    ...facing
+  }, facings.length));
+  renderStoreFacingTracker(facings);
+}
+
 function renderStoreManager() {
   const query = normalizedName(els.storeManagerSearch?.value || "");
   const selectedId = els.storeManagerId?.value || "";
@@ -3343,12 +3442,13 @@ function renderStoreManager() {
     button.type = "button";
     button.dataset.storeManagerId = store.id;
     const productCount = (store.products || []).filter((product) => !isDeliveryItem(product)).length;
+    const facingCount = facingsForStore(store).length;
     const hasGeo = Boolean(Number(store.lat) && Number(store.lng));
     const addressStatus = addressLooksMappable(store.address || "") ? "Address ready" : "Check address";
     button.innerHTML = `
       <strong>${escapeHtml(store.name)}</strong>
       <span>${escapeHtml([store.address?.split("\n").at(-1), store.orderBlocked ? "Ordered by office" : "Salesman order allowed"].filter(Boolean).join(" - "))}</span>
-      <small>${productCount} product${productCount === 1 ? "" : "s"}${store.orderBlocked ? " - Office" : ""} - ${hasGeo ? "Geo saved" : "Needs geo"} - ${addressStatus}</small>
+      <small>${productCount} product${productCount === 1 ? "" : "s"} - ${facingCount} facing${facingCount === 1 ? "" : "s"}${store.orderBlocked ? " - Office" : ""} - ${hasGeo ? "Geo saved" : "Needs geo"} - ${addressStatus}</small>
     `;
     els.storeManagerList.append(button);
   });
@@ -3551,6 +3651,7 @@ function hideStoreManagerEditor() {
   els.storeManagerLat.value = "";
   els.storeManagerLng.value = "";
   els.storeManagerShelfInfo.value = "";
+  renderStoreFacingTracker([]);
   renderStoreManager();
 }
 
@@ -3565,6 +3666,7 @@ function resetStoreManagerForm() {
   els.storeManagerLat.value = "";
   els.storeManagerLng.value = "";
   els.storeManagerShelfInfo.value = "";
+  renderStoreFacingTracker([]);
   renderStoreManager();
 }
 
@@ -3590,6 +3692,7 @@ function editStoreManager(id) {
   els.storeManagerBlocked.checked = Boolean(store.orderBlocked);
   els.storeManagerBlockedReason.value = store.orderBlockedReason || "";
   els.storeManagerProducts.value = storeProductsToText(store.products || []);
+  renderStoreFacingTracker(facingsForStore(store));
   els.storeManagerShelfInfo.value = store.shelfInfo || "";
   renderStoreManager();
 }
@@ -3618,6 +3721,7 @@ function storeFromManagerForm() {
     orderBlocked: els.storeManagerBlocked.checked,
     orderBlockedReason: els.storeManagerBlockedReason.value.trim(),
     shelfInfo: els.storeManagerShelfInfo.value.trim(),
+    facings: storeFacingsFromForm(),
     products: mergeProducts([], [...storeProductsFromText(els.storeManagerProducts.value), ...deliveryProducts])
   };
 }
@@ -4093,6 +4197,7 @@ function attachEvents() {
   els.saveStore.addEventListener("click", saveStoreFromForm);
   els.storeManagerForm.addEventListener("submit", saveStoreManagerForm);
   els.storeManagerSearch.addEventListener("input", renderStoreManager);
+  els.addStoreFacing?.addEventListener("click", () => addStoreFacingRow());
   els.checkStoreAddresses.addEventListener("click", checkStoreAddresses);
   els.newStoreRecord.addEventListener("click", resetStoreManagerForm);
   els.clearStoreManager.addEventListener("click", hideStoreManagerEditor);
@@ -4163,6 +4268,7 @@ function attachEvents() {
     const applyStoreGeo = event.target.closest("[data-apply-store-geo]");
     const applyStoreAddress = event.target.closest("[data-apply-store-address]");
     const productManagerItem = event.target.closest("[data-product-manager-key]");
+    const deleteFacing = event.target.closest("[data-delete-facing]");
     const deleteReceipt = event.target.closest("[data-delete-receipt]");
     const deleteProspect = event.target.closest("[data-delete-prospect]");
     const clearRouteSlot = event.target.closest("[data-clear-route-slot]");
@@ -4191,6 +4297,10 @@ function attachEvents() {
     }
     if (storeManagerItem) editStoreManager(storeManagerItem.dataset.storeManagerId);
     if (productManagerItem) editProductManager(productManagerItem.dataset.productManagerKey);
+    if (deleteFacing) {
+      renderStoreFacingTracker(storeFacingsFromForm().filter((facing) => facing.id !== deleteFacing.dataset.deleteFacing));
+      return;
+    }
     if (clearRouteSlot) {
       clearRouteDeliverySlot(clearRouteSlot.dataset.clearRouteSlot);
       return;
@@ -4303,6 +4413,16 @@ function attachEvents() {
   });
 
   document.addEventListener("change", (event) => {
+    if (event.target.matches("[data-facing-field=\"productKey\"]")) {
+      const option = event.target.selectedOptions?.[0];
+      const row = event.target.closest(".store-facing-row");
+      const flavorInput = row?.querySelector("[data-facing-field=\"flavor\"]");
+      if (flavorInput && option?.dataset.facingDescription && !flavorInput.value.trim()) {
+        flavorInput.value = option.dataset.facingDescription;
+      }
+      return;
+    }
+
     const routeSlotFile = event.target.dataset.routeSlotFile;
     if (routeSlotFile) {
       processRouteSlotFile(event.target.files?.[0], routeSlotFile);
@@ -5501,7 +5621,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=89";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=90";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

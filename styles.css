@@ -360,6 +360,40 @@ textarea {
   gap: 8px;
 }
 
+.facing-tracker {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfc;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.store-facing-list {
+  display: grid;
+  gap: 10px;
+}
+
+.store-facing-row {
+  display: grid;
+  grid-template-columns: 78px minmax(160px, 1.3fr) minmax(150px, 1fr);
+  gap: 10px;
+  align-items: end;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.store-facing-row label:nth-of-type(4),
+.store-facing-row label:nth-of-type(5) {
+  grid-column: span 2;
+}
+
+.store-facing-row button {
+  min-height: 42px;
+}
+
 .store-manager-list {
   display: grid;
   gap: 8px;
@@ -1272,6 +1306,15 @@ th {
     grid-template-columns: 1fr;
   }
 
+  .store-facing-row {
+    grid-template-columns: 1fr;
+  }
+
+  .store-facing-row label:nth-of-type(4),
+  .store-facing-row label:nth-of-type(5) {
+    grid-column: auto;
+  }
+
   .qty-cell {
     grid-template-columns: 1fr 92px 1fr;
   }
@@ -1291,6 +1334,7 @@ th {
   .route-slot .compact-file-button,
   .route-slot .route-slot-attach,
   .route-slot .route-manual-invoice-button,
+  .route-slot .route-talk-button,
   .route-slot .route-delivered-toggle,
   .route-slot .compact-slot-button {
     grid-column: 1 / -1;

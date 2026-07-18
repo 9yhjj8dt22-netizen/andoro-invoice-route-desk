@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v89 stop talk cancel control for voice entry.
+Current live app version: v90 structured store facing tracker.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

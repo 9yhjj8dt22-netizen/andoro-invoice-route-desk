@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "89";
+        const currentVersion = "90";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v89")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v90")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=89">
+    <link rel="stylesheet" href="styles.css?v=90">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -645,6 +645,14 @@
                 Products carried / facings
                 <textarea id="storeManagerProducts" rows="10" placeholder="Description | UPC | U/M | Rate | Facings"></textarea>
               </label>
+              <section class="facing-tracker">
+                <div class="panel-heading controls-heading">
+                  <h2>Facing Tracker</h2>
+                  <button class="secondary-button" id="addStoreFacing" type="button">Add facing</button>
+                </div>
+                <div class="muted">Track each spot this store gives us and what flavor/product belongs there.</div>
+                <div class="store-facing-list" id="storeFacingList"></div>
+              </section>
               <label>
                 Shelf / spacing notes
                 <textarea id="storeManagerShelfInfo" rows="5" placeholder="Example: Door 3, top shelf, 2 facings pepperoni 12&quot;, end cap opportunity"></textarea>
@@ -760,9 +768,9 @@
       </div>
     </template>
 
-    <script src="assets/vendor/pdfjs/pdf.min.js?v=89"></script>
-    <script src="assets/vendor/tesseract/tesseract.min.js?v=89"></script>
-    <script src="app.js?v=89"></script>
+    <script src="assets/vendor/pdfjs/pdf.min.js?v=90"></script>
+    <script src="assets/vendor/tesseract/tesseract.min.js?v=90"></script>
+    <script src="app.js?v=90"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
