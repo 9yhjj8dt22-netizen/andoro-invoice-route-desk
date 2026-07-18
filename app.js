@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=87",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=88",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -1698,6 +1698,7 @@ function renderRouteDeliverySlots() {
         <button class="secondary-button compact-slot-button" data-attach-route-invoice="${slot}" type="button">Attach</button>
       </div>
       ${selectedStore ? `<button class="secondary-button compact-slot-button route-manual-invoice-button" data-add-manual-route-invoice="${slot}" type="button">Add manual invoice</button>` : ""}
+      ${selectedStore ? `<button class="secondary-button compact-slot-button route-talk-button" data-voice-route-slot="${slot}" type="button">Talk / Voice Entry</button>` : ""}
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
       <div class="route-slot-move">
         <button class="ghost-button compact-slot-button" data-route-slot-up="${slot}" type="button">Up</button>
@@ -2582,6 +2583,34 @@ async function voiceEntryForScan(id) {
   } finally {
     voiceEntryActive = false;
   }
+}
+
+function routeScanForVoiceSlot(slot) {
+  const slotRecord = routeDeliverySlot(slot);
+  const store = (state.stores || []).find((item) => item.id === slotRecord?.storeId);
+  if (!slotRecord || !store) {
+    alert("Select the store for this delivery spot first.");
+    return null;
+  }
+  let scans = routeScansForSlot(slotRecord);
+  if (!scans.length) {
+    const scan = placeholderScanForStore(store, slot);
+    scan.fileName = "Voice entry";
+    scan.accepted = true;
+    state.scans = state.scans || [];
+    state.scans.push(scan);
+    assignScanToRouteSlot(scan, slot);
+    saveState();
+    scans = [scan];
+  }
+  return scans.find((scan) => !scan.number || !scanDelivered(scan)) || scans[0] || null;
+}
+
+function voiceEntryForRouteSlot(slot) {
+  const scan = routeScanForVoiceSlot(slot);
+  if (!scan) return;
+  renderScans();
+  voiceEntryForScan(scan.id);
 }
 
 function routeSummaryStoreKey(scan = {}) {
@@ -4051,6 +4080,7 @@ function attachEvents() {
     const clearRouteSlot = event.target.closest("[data-clear-route-slot]");
     const attachRouteInvoice = event.target.closest("[data-attach-route-invoice]");
     const addManualRouteInvoice = event.target.closest("[data-add-manual-route-invoice]");
+    const voiceRouteSlot = event.target.closest("[data-voice-route-slot]");
     const voiceRouteEntry = event.target.closest("[data-voice-route-entry]");
     const routeSlotUp = event.target.closest("[data-route-slot-up]");
     const routeSlotDown = event.target.closest("[data-route-slot-down]");
@@ -4082,6 +4112,10 @@ function attachEvents() {
     }
     if (addManualRouteInvoice) {
       addManualInvoiceToRouteSlot(addManualRouteInvoice.dataset.addManualRouteInvoice);
+      return;
+    }
+    if (voiceRouteSlot) {
+      voiceEntryForRouteSlot(voiceRouteSlot.dataset.voiceRouteSlot);
       return;
     }
     if (voiceRouteEntry) {
@@ -5374,7 +5408,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=87";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=88";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

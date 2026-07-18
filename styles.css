@@ -834,6 +834,7 @@ th {
 .route-slot .compact-file-button,
 .route-slot .route-slot-attach,
 .route-slot .route-manual-invoice-button,
+.route-slot .route-talk-button,
 .route-slot .route-delivered-toggle,
 .route-slot .compact-slot-button {
   grid-column: 2 / -1;
@@ -857,6 +858,12 @@ th {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.route-talk-button {
+  min-height: 48px;
+  font-size: 1rem;
+  font-weight: 900;
 }
 
 .route-slot-attach select {
