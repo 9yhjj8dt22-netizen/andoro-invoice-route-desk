@@ -4,12 +4,13 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=88",
+  workerPath: "assets/vendor/tesseract/worker.min.js?v=89",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
 };
 let voiceEntryActive = false;
+let voiceEntryState = null;
 const TAB_HEADERS = {
   invoices: "Check Store Needs - Build Order - Get Signature - Print / Share",
   scan: "Route Organizer / Summary",
@@ -2389,8 +2390,58 @@ function speechRecognitionConstructor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
+function showVoiceCancelBar(storeName = "this stop") {
+  let bar = document.querySelector("#voiceCancelBar");
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "voiceCancelBar";
+    bar.className = "voice-cancel-bar";
+    document.body.append(bar);
+  }
+  bar.innerHTML = `
+    <strong>Voice Entry running: ${escapeHtml(storeName)}</strong>
+    <button class="danger-button" data-cancel-voice-entry type="button">Stop Talk</button>
+  `;
+}
+
+function hideVoiceCancelBar() {
+  document.querySelector("#voiceCancelBar")?.remove();
+}
+
+function cleanupCanceledVoiceEntry() {
+  const createdScanId = voiceEntryState?.createdScanId;
+  if (!createdScanId || voiceEntryState?.saved) return;
+  state.scans = (state.scans || []).filter((scan) => scan.id !== createdScanId);
+  routeDeliverySlots().forEach((slotRecord) => {
+    setRouteSlotScanIds(slotRecord, routeSlotScanIds(slotRecord).filter((id) => id !== createdScanId));
+  });
+  saveState();
+  renderScans();
+  renderRouteDayCapture();
+}
+
+function cancelVoiceEntry() {
+  if (!voiceEntryState) return;
+  voiceEntryState.cancelled = true;
+  window.speechSynthesis?.cancel?.();
+  try {
+    voiceEntryState.recognition?.abort?.();
+  } catch (error) {
+    // The browser may already have ended microphone capture.
+  }
+  if (voiceEntryState.reject) voiceEntryState.reject(new Error("Voice Entry canceled."));
+}
+
+function ensureVoiceNotCanceled() {
+  if (voiceEntryState?.cancelled) throw new Error("Voice Entry canceled.");
+}
+
 function speakVoice(text) {
   return new Promise((resolve) => {
+    if (voiceEntryState?.cancelled) {
+      resolve();
+      return;
+    }
     if (!("speechSynthesis" in window)) {
       resolve();
       return;
@@ -2408,6 +2459,7 @@ async function listenForVoice(promptText) {
   const Recognition = speechRecognitionConstructor();
   if (!Recognition) throw new Error("Speech recognition is not available on this browser.");
   await speakVoice(promptText);
+  ensureVoiceNotCanceled();
   return new Promise((resolve, reject) => {
     const recognition = new Recognition();
     let settled = false;
@@ -2415,6 +2467,8 @@ async function listenForVoice(promptText) {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
+      if (voiceEntryState?.recognition === recognition) voiceEntryState.recognition = null;
+      if (voiceEntryState?.reject === fail) voiceEntryState.reject = null;
       try {
         recognition.stop();
       } catch (error) {
@@ -2426,6 +2480,8 @@ async function listenForVoice(promptText) {
       if (settled) return;
       settled = true;
       clearTimeout(timeoutId);
+      if (voiceEntryState?.recognition === recognition) voiceEntryState.recognition = null;
+      if (voiceEntryState?.reject === fail) voiceEntryState.reject = null;
       try {
         recognition.stop();
       } catch (error) {
@@ -2444,6 +2500,10 @@ async function listenForVoice(promptText) {
       else fail(event.error || "Voice entry failed.");
     };
     recognition.onend = () => finish("");
+    if (voiceEntryState) {
+      voiceEntryState.recognition = recognition;
+      voiceEntryState.reject = fail;
+    }
     recognition.start();
   });
 }
@@ -2524,7 +2584,7 @@ function parseVoiceYesNo(text = "") {
   return null;
 }
 
-async function voiceEntryForScan(id) {
+async function voiceEntryForScan(id, options = {}) {
   const scan = state.scans.find((item) => item.id === id);
   if (!scan) return;
   if (voiceEntryActive) {
@@ -2536,14 +2596,28 @@ async function voiceEntryForScan(id) {
     return;
   }
   voiceEntryActive = true;
+  voiceEntryState = {
+    cancelled: false,
+    createdScanId: options.createdScanId || "",
+    saved: false,
+    recognition: null,
+    reject: null
+  };
   try {
     const storeName = scan.customer || "this stop";
+    showVoiceCancelBar(storeName);
     await speakVoice(`Voice entry for ${storeName}. Say skip on any field to keep what is already there.`);
+    ensureVoiceNotCanceled();
     const numberText = await listenForVoice("Invoice number. Say each digit one at a time, or say skip.");
+    ensureVoiceNotCanceled();
     const totalText = await listenForVoice("Invoice total. Say the dollars and cents, or say skip.");
+    ensureVoiceNotCanceled();
     const deliveredText = await listenForVoice("Delivered? Say yes, no, or skip.");
+    ensureVoiceNotCanceled();
     const paidText = await listenForVoice("Paid? Say yes, no, or skip.");
+    ensureVoiceNotCanceled();
     const notesText = await listenForVoice("Stop notes. Say your note, or say skip.");
+    ensureVoiceNotCanceled();
     const next = {
       number: voiceTextIsSkip(numberText) || !numberText ? scan.number || "" : parseVoiceInvoiceNumber(numberText),
       total: voiceTextIsSkip(totalText) || !totalText ? routeInvoiceTotalForScan(scan) : parseVoiceMoney(totalText),
@@ -2563,6 +2637,7 @@ async function voiceEntryForScan(id) {
       `Notes: ${next.routeNote || "none"}`
     ].join("\n");
     await speakVoice(`I heard invoice ${next.number || "blank"}, total ${money.format(Number(next.total || 0))}, delivered ${next.delivered ? "yes" : "no"}, paid ${next.paid ? "yes" : "no"}. Check the screen and confirm to save.`);
+    ensureVoiceNotCanceled();
     if (!confirm(`Save this voice entry?\n\n${readback}`)) return;
     scan.number = next.number;
     scan.total = Number(next.total || 0);
@@ -2573,15 +2648,24 @@ async function voiceEntryForScan(id) {
     scan.paid = Boolean(next.paid);
     scan.routeNote = next.routeNote;
     scan.accepted = true;
+    voiceEntryState.saved = true;
     saveState();
     renderScans();
     renderRouteDayCapture();
     renderRouteDayStatus();
     await speakVoice("Saved.");
   } catch (error) {
-    alert(error.message || "Voice Entry could not finish.");
+    if (error.message === "Voice Entry canceled.") {
+      els.routeDayStatus.textContent = "Voice Entry canceled.";
+    } else {
+      alert(error.message || "Voice Entry could not finish.");
+    }
   } finally {
+    cleanupCanceledVoiceEntry();
+    hideVoiceCancelBar();
     voiceEntryActive = false;
+    voiceEntryState = null;
+    renderRouteDayStatus();
   }
 }
 
@@ -2593,6 +2677,7 @@ function routeScanForVoiceSlot(slot) {
     return null;
   }
   let scans = routeScansForSlot(slotRecord);
+  let createdScanId = "";
   if (!scans.length) {
     const scan = placeholderScanForStore(store, slot);
     scan.fileName = "Voice entry";
@@ -2601,16 +2686,19 @@ function routeScanForVoiceSlot(slot) {
     state.scans.push(scan);
     assignScanToRouteSlot(scan, slot);
     saveState();
+    createdScanId = scan.id;
     scans = [scan];
   }
-  return scans.find((scan) => !scan.number || !scanDelivered(scan)) || scans[0] || null;
+  const scan = scans.find((scan) => !scan.number || !scanDelivered(scan)) || scans[0] || null;
+  return { scan, createdScanId };
 }
 
 function voiceEntryForRouteSlot(slot) {
-  const scan = routeScanForVoiceSlot(slot);
+  const result = routeScanForVoiceSlot(slot);
+  const scan = result?.scan;
   if (!scan) return;
   renderScans();
-  voiceEntryForScan(scan.id);
+  voiceEntryForScan(scan.id, { createdScanId: result.createdScanId });
 }
 
 function routeSummaryStoreKey(scan = {}) {
@@ -4082,6 +4170,7 @@ function attachEvents() {
     const addManualRouteInvoice = event.target.closest("[data-add-manual-route-invoice]");
     const voiceRouteSlot = event.target.closest("[data-voice-route-slot]");
     const voiceRouteEntry = event.target.closest("[data-voice-route-entry]");
+    const cancelVoice = event.target.closest("[data-cancel-voice-entry]");
     const routeSlotUp = event.target.closest("[data-route-slot-up]");
     const routeSlotDown = event.target.closest("[data-route-slot-down]");
     if (editInvoice) editInvoiceById(editInvoice.dataset.editInvoice);
@@ -4120,6 +4209,10 @@ function attachEvents() {
     }
     if (voiceRouteEntry) {
       voiceEntryForScan(voiceRouteEntry.dataset.voiceRouteEntry);
+      return;
+    }
+    if (cancelVoice) {
+      cancelVoiceEntry();
       return;
     }
     if (routeSlotUp) {
@@ -5408,7 +5501,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=88";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=89";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
