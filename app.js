@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-    workerPath: "assets/vendor/tesseract/worker.min.js?v=96",
+    workerPath: "assets/vendor/tesseract/worker.min.js?v=97",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -2364,6 +2364,55 @@ function googleMapsUrl(stops) {
   return `https://www.google.com/maps/dir/${points.join("/")}`;
 }
 
+function currentRouteMapStops() {
+  const ordered = optimizedStops();
+  if (ordered.length) return ordered;
+  return routeSlotPrimaryScans()
+    .filter((scan) => scan.address || (Number(scan.lat) && Number(scan.lng)))
+    .map((scan) => {
+      const store = (state.stores || []).find((item) => item.id === scan.matchedStoreId);
+      return {
+        id: scan.id,
+        name: store?.name || scan.customer || "Stop",
+        address: store?.address || scan.address || "",
+        lat: Number(store?.lat || scan.lat || 0),
+        lng: Number(store?.lng || scan.lng || 0)
+      };
+    });
+}
+
+function routeBuildSummaryDetails() {
+  const saved = state.routeDay?.routeBuildSummary || {};
+  const stops = currentRouteMapStops();
+  const miles = Number(saved.miles || (stops.length ? routeDistance(stops, fixedRouteOrigin()) : 0));
+  const stopCount = Number(saved.stopCount || stops.length || 0);
+  const freshCoordinates = Number(saved.freshCoordinates || 0);
+  const unmappedStops = Number(saved.unmappedStops || 0);
+  return {
+    builtAt: saved.builtAt || "",
+    startEnd: saved.startEnd || FIXED_ROUTE_ORIGIN.address,
+    stopCount,
+    miles,
+    freshCoordinates,
+    unmappedStops,
+    mapsUrl: saved.mapsUrl || (stops.length ? googleMapsUrl(stops) : ""),
+    note: saved.note || ""
+  };
+}
+
+function routeBuildSummaryLines(summary = routeBuildSummaryDetails()) {
+  if (!summary.stopCount && !summary.mapsUrl) return [];
+  return [
+    `Start / End: ${summary.startEnd || FIXED_ROUTE_ORIGIN.address}`,
+    `Stops routed: ${summary.stopCount}`,
+    summary.miles ? `Estimated miles before traffic: ${Number(summary.miles).toFixed(1)}` : "",
+    summary.freshCoordinates ? `Fresh coordinates found: ${summary.freshCoordinates}` : "",
+    summary.unmappedStops ? `Stops not mapped: ${summary.unmappedStops}` : "All selected stops verified for Google Maps",
+    summary.builtAt ? `Built: ${formatDateTime(summary.builtAt)}` : "",
+    summary.note || ""
+  ].filter(Boolean);
+}
+
 function mapPointForStop(stop = {}) {
   if (Number(stop.lat) && Number(stop.lng)) return `${Number(stop.lat).toFixed(6)},${Number(stop.lng).toFixed(6)}`;
   return [stop.name, stop.address].filter(Boolean).join(", ") || "";
@@ -2909,6 +2958,8 @@ function routeSummaryHtml() {
   const stops = routeSummaryInvoiceScans();
   const receipts = state.routeDay?.receipts || [];
   const prospects = state.routeDay?.prospects || [];
+  const routeSummary = routeBuildSummaryDetails();
+  const routeSummaryLines = routeBuildSummaryLines(routeSummary);
   const receiptRows = receipts.map((receipt, index) => `
     <tr>
       <td>${index + 1}</td>
@@ -2960,6 +3011,10 @@ function routeSummaryHtml() {
     h1 { margin: 0; font-size: 26px; color: #0d3326; }
     .meta { text-align: right; line-height: 1.35; font-size: 12px; font-weight: 700; }
     .total { margin: 14px 0; padding: 11px 12px; border: 2px solid #176b4d; display: flex; justify-content: space-between; font-size: 19px; font-weight: 900; }
+    .route-map-summary { margin: 10px 0 14px; border: 1.5px solid #176b4d; padding: 9px; font-size: 10.5px; line-height: 1.35; }
+    .route-map-summary strong { display: block; margin-bottom: 4px; color: #0d3326; font-size: 12px; }
+    .route-map-summary span { display: block; color: #10251d; margin: 0; font-size: 10.5px; }
+    .route-map-summary a { display: block; margin-top: 5px; color: #0d3326; font-weight: 700; overflow-wrap: anywhere; }
     h2 { margin: 16px 0 6px; font-size: 15px; color: #0d3326; }
     .notes { border: 1px solid #176b4d; padding: 9px; min-height: 70px; line-height: 1.35; font-size: 10.5px; }
     table { width: 100%; border-collapse: collapse; }
@@ -2983,6 +3038,9 @@ function routeSummaryHtml() {
       .meta { font-size: 9.5px; line-height: 1.25; }
       h2 { margin: 10px 0 4px; font-size: 12.5px; }
       .total { margin: 8px 0; padding: 7px 9px; font-size: 15px; }
+      .route-map-summary { margin: 6px 0 9px; padding: 6px; font-size: 8px; line-height: 1.2; }
+      .route-map-summary strong { font-size: 9.5px; margin-bottom: 3px; }
+      .route-map-summary span, .route-map-summary a { font-size: 8px; }
       .notes { min-height: 64px; padding: 7px; font-size: 8.8px; line-height: 1.22; }
       th, td { padding: 3.5px 4px; font-size: 8.8px; }
       th { font-size: 8.6px; }
@@ -3013,6 +3071,13 @@ function routeSummaryHtml() {
       </div>
     </header>
     <section class="total"><span>Day Invoice Total</span><span>${money.format(routeDayTotal())}</span></section>
+    ${routeSummaryLines.length ? `
+      <section class="route-map-summary">
+        <strong>Route Build / Google Maps Summary</strong>
+        ${routeSummaryLines.map((line) => `<span>${escapeHtml(line)}</span>`).join("")}
+        ${routeSummary.mapsUrl ? `<a href="${escapeAttribute(routeSummary.mapsUrl)}" target="_blank" rel="noreferrer">Open Google Maps route</a>` : ""}
+      </section>
+    ` : ""}
     <h2>Day Notes</h2>
     <section class="notes">${escapeHtml(state.routeDay?.notes || "No general day notes.").replace(/\n/g, "<br>")}</section>
     <h2>Today's Route</h2>
@@ -3182,6 +3247,15 @@ function buildRouteSummaryPdfBlob() {
   drawText("Day Invoice Total", margin + 8, y - 16, 12, "F2", color(0.05, 0.20, 0.15));
   drawText(money.format(routeDayTotal()), width - margin - 92, y - 16, 12, "F2", color(0.05, 0.20, 0.15));
   y -= 40;
+  const routeSummary = routeBuildSummaryDetails();
+  const routeSummaryLines = routeBuildSummaryLines(routeSummary);
+  if (routeSummaryLines.length) {
+    drawSectionTitle("Route Build / Google Maps Summary");
+    drawWrappedBlock([
+      ...routeSummaryLines,
+      routeSummary.mapsUrl ? `Google Maps route: ${routeSummary.mapsUrl}` : ""
+    ].filter(Boolean).join(" | "), 40);
+  }
   drawSectionTitle("Day Notes");
   drawWrappedBlock(state.routeDay?.notes || "No general day notes.", 48);
   drawSectionTitle("Today's Route");
@@ -3254,6 +3328,20 @@ function downloadBlob(blob, fileName) {
 
 function formatDate(value) {
   return value ? dateFormat.format(new Date(`${value}T00:00:00`)) : "No date";
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  } catch {
+    return "";
+  }
 }
 
 function escapeHtml(value = "") {
@@ -6096,7 +6184,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=96";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=97";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
@@ -6371,12 +6459,23 @@ async function buildRouteFromDeliverySlots() {
     els.buildRoute.textContent = originalLabel;
     return;
   }
+  const miles = routeDistance(optimizedStops, fixedRouteOrigin());
+  state.routeDay = state.routeDay || structuredClone(sampleData.routeDay);
+  state.routeDay.routeBuildSummary = {
+    builtAt: new Date().toISOString(),
+    startEnd: FIXED_ROUTE_ORIGIN.address,
+    stopCount: optimizedStops.length,
+    miles,
+    freshCoordinates: preflight.updated || 0,
+    unmappedStops: geocodeResult.missing || 0,
+    mapsUrl: googleMapsUrl(optimizedStops),
+    note: "Estimated before traffic. Google Maps may adjust drive time and route after opening."
+  };
   saveState();
   render();
   setTab("scan");
   els.buildRoute.disabled = false;
   els.buildRoute.textContent = originalLabel;
-  const miles = routeDistance(optimizedStops, fixedRouteOrigin());
   alert(`Route built in the most efficient order from 92 Produce Row and returning to 92 Produce Row. ${optimizedStops.length} stop${optimizedStops.length === 1 ? "" : "s"} verified for Google Maps, about ${miles.toFixed(1)} miles before traffic.${preflight.updated ? ` ${preflight.updated} stop${preflight.updated === 1 ? "" : "s"} got fresh coordinates.` : ""}${geocodeResult.missing ? ` ${geocodeResult.missing} stop${geocodeResult.missing === 1 ? "" : "s"} could not be mapped and stayed at the end.` : ""} ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${result.skippedStoreReview ? ` ${result.skippedStoreReview} invoice${result.skippedStoreReview === 1 ? "" : "s"} not saved because the store was not approved.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
 }
 

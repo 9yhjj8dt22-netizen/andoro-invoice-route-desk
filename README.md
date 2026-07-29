@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v96 adds no-backend ChatGPT coordinate helper.
+Current live app version: v97 prints route build summary and Google Maps link.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
