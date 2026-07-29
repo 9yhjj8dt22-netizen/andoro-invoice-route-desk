@@ -20,10 +20,20 @@
   box-sizing: border-box;
 }
 
+html {
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   margin: 0;
   background: var(--page);
   color: var(--ink);
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 body.access-locked .app-shell {
@@ -88,6 +98,8 @@ input,
 select,
 textarea {
   font: inherit;
+  font-size: 16px;
+  max-width: 100%;
 }
 
 button,
@@ -98,6 +110,9 @@ label.file-button {
 
 .app-shell {
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  min-width: 0;
   display: grid;
   grid-template-columns: 260px 1fr;
 }
@@ -162,6 +177,8 @@ label.file-button {
 
 .workspace {
   padding: 28px;
+  min-width: 0;
+  max-width: 100%;
   display: grid;
   gap: 24px;
   align-content: start;
@@ -276,6 +293,7 @@ h2 {
 .work-panel,
 .editor-panel {
   padding: 18px;
+  min-width: 0;
 }
 
 .panel-heading {
@@ -297,6 +315,13 @@ h2 {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.control-row > *,
+.button-row > *,
+.route-actions > * {
+  min-width: 0;
 }
 
 .editor-panel {
@@ -306,6 +331,56 @@ h2 {
 
 .store-manager-layout.editor-closed {
   grid-template-columns: 1fr;
+}
+
+.geo-needed-panel {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 2px solid var(--red);
+  border-radius: 8px;
+  background: #fff7f7;
+}
+
+.geo-needed-header {
+  display: grid;
+  gap: 2px;
+}
+
+.geo-needed-header strong {
+  color: var(--red-dark);
+}
+
+.geo-needed-header span {
+  color: #333;
+  font-size: 0.92rem;
+}
+
+.geo-needed-list {
+  display: grid;
+  gap: 8px;
+}
+
+.geo-needed-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.geo-needed-card strong,
+.geo-needed-card span {
+  display: block;
+}
+
+.geo-needed-card span {
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .store-manager-layout.editor-closed #storeManagerForm {
@@ -872,6 +947,7 @@ th {
 .route-slot .compact-file-button,
 .route-slot .route-slot-attach,
 .route-slot .route-manual-invoice-button,
+.route-slot .route-edit-store-button,
 .route-slot .route-talk-button,
 .route-slot .route-delivered-toggle,
 .route-slot .compact-slot-button {
@@ -910,8 +986,8 @@ th {
 }
 
 .route-slot-attach select {
-  min-width: 260px;
-  flex: 1 1 320px;
+  min-width: min(100%, 260px);
+  flex: 1 1 240px;
 }
 
 .route-slot-notes label {
@@ -1343,6 +1419,7 @@ th {
   .route-slot .compact-file-button,
   .route-slot .route-slot-attach,
   .route-slot .route-manual-invoice-button,
+  .route-slot .route-edit-store-button,
   .route-slot .route-talk-button,
   .route-slot .route-delivered-toggle,
   .route-slot .compact-slot-button {
@@ -1356,7 +1433,17 @@ th {
 
 @media (max-width: 620px) {
   .workspace {
-    padding: 16px;
+    padding: 12px;
+  }
+
+  .sidebar {
+    padding: 10px;
+  }
+
+  .topbar,
+  .work-panel,
+  .editor-panel {
+    padding: 12px;
   }
 
   .brand {
@@ -1387,7 +1474,17 @@ th {
 
   .control-row > *,
   .button-row > *,
-  .picker-row > * {
+  .picker-row > *,
+  .route-slot-attach > * {
     width: 100%;
+  }
+
+  .geo-needed-card {
+    grid-template-columns: 1fr;
+  }
+
+  .route-slot {
+    gap: 10px;
+    padding: 10px;
   }
 }

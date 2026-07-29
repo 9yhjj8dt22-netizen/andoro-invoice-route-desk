@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-    workerPath: "assets/vendor/tesseract/worker.min.js?v=93",
+    workerPath: "assets/vendor/tesseract/worker.min.js?v=94",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -272,6 +272,7 @@ const els = {
   storeOrderNotice: document.querySelector("#storeOrderNotice"),
   storeManagerSearch: document.querySelector("#storeManagerSearch"),
   storeManagerLayout: document.querySelector("#storeManagerLayout"),
+  geoNeededPanel: document.querySelector("#geoNeededPanel"),
   storeManagerList: document.querySelector("#storeManagerList"),
   storeManagerForm: document.querySelector("#storeManagerForm"),
   storeManagerTitle: document.querySelector("#storeManagerTitle"),
@@ -590,6 +591,12 @@ function setTab(tabId) {
     panel.classList.toggle("active", panel.id === tabId);
   });
   els.pageHeader.textContent = TAB_HEADERS[tabId] || TAB_HEADERS.invoices;
+  if (tabId === "stores") {
+    requestAnimationFrame(() => {
+      document.querySelector("#stores")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  }
 }
 
 function emptyState() {
@@ -698,6 +705,18 @@ function renderStores() {
   els.storeSelect.value = stores.some((store) => store.id === selected) ? selected : "";
   renderStoreProducts();
   renderStoreOrderNotice();
+}
+
+function refreshStoreDependentViews(selectedInvoiceStoreId = "") {
+  renderStores();
+  renderStoreManager();
+  renderRouteDayCapture();
+  renderRouteDayStatus();
+  if (selectedInvoiceStoreId && [...els.storeSelect.options].some((option) => option.value === selectedInvoiceStoreId)) {
+    els.storeSelect.value = selectedInvoiceStoreId;
+    renderStoreProducts();
+    renderStoreOrderNotice();
+  }
 }
 
 function selectedStore() {
@@ -1734,6 +1753,7 @@ function renderRouteDeliverySlots() {
         <button class="secondary-button compact-slot-button" data-attach-route-invoice="${slot}" type="button">Attach</button>
       </div>
       ${selectedStore ? `<button class="secondary-button compact-slot-button route-manual-invoice-button" data-add-manual-route-invoice="${slot}" type="button">Add manual invoice</button>` : ""}
+      ${selectedStore ? `<button class="secondary-button compact-slot-button route-edit-store-button" data-edit-route-store="${escapeAttribute(selectedStore.id)}" type="button">Edit store</button>` : ""}
       ${selectedStore ? `<button class="secondary-button compact-slot-button route-talk-button" data-voice-route-slot="${slot}" type="button">Talk / Voice Entry</button>` : ""}
       ${scan ? `<button class="ghost-button compact-slot-button" data-clear-route-slot="${slot}" type="button">Clear</button>` : ""}
       <div class="route-slot-move">
@@ -3547,12 +3567,54 @@ function addStoreFacingRow(facing = {}) {
   renderStoreFacingTracker(facings);
 }
 
+function storesNeedingGeoTag() {
+  return [...(state.stores || [])]
+    .filter((store) => !hasUsableMapCoordinates(store))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function renderGeoNeededPanel() {
+  if (!els.geoNeededPanel) return;
+  const stores = storesNeedingGeoTag();
+  if (!stores.length) {
+    els.geoNeededPanel.innerHTML = `
+      <div class="geo-needed-header">
+        <strong>Geo tags complete</strong>
+        <span>Every saved store has coordinates.</span>
+      </div>
+    `;
+    return;
+  }
+  els.geoNeededPanel.innerHTML = `
+    <div class="geo-needed-header">
+      <strong>${stores.length} store${stores.length === 1 ? "" : "s"} need geo tagged</strong>
+      <span>Fix these before routing so Google Maps has exact stops.</span>
+    </div>
+    <div class="geo-needed-list">
+      ${stores.slice(0, 12).map((store) => `
+        <article class="geo-needed-card">
+          <div>
+            <strong>${escapeHtml(store.name || "Saved store")}</strong>
+            <span>${escapeHtml(store.address || "No address saved")}</span>
+          </div>
+          <div class="button-row">
+            <button class="secondary-button compact-slot-button" data-store-manager-id="${escapeAttribute(store.id)}" type="button">Edit store</button>
+            <a class="map-link" href="${escapeAttribute(googleMapsSearchUrl(store.name, store.address))}" target="_blank" rel="noreferrer">Google</a>
+          </div>
+        </article>
+      `).join("")}
+    </div>
+    ${stores.length > 12 ? `<small class="muted">Showing first 12. Use search to narrow the list.</small>` : ""}
+  `;
+}
+
 function renderStoreManager() {
   const query = normalizedName(els.storeManagerSearch?.value || "");
   const selectedId = els.storeManagerId?.value || "";
   const stores = [...(state.stores || [])]
     .filter((store) => !query || normalizedName(`${store.name} ${store.address}`).includes(query))
     .sort((a, b) => a.name.localeCompare(b.name));
+  renderGeoNeededPanel();
   els.storeManagerList.replaceChildren();
   if (!stores.length) {
     els.storeManagerList.append(emptyState());
@@ -3840,6 +3902,13 @@ function editStoreManager(id) {
   renderStoreManager();
 }
 
+function editStoreFromRoute(storeId) {
+  if (!storeId) return;
+  setTab("stores");
+  editStoreManager(storeId);
+  requestAnimationFrame(() => els.storeManagerForm?.scrollIntoView({ behavior: "smooth", block: "start" }));
+}
+
 function storeFromManagerForm() {
   const existing = (state.stores || []).find((store) => store.id === els.storeManagerId.value);
   const deliveryFee = Number(els.storeManagerDeliveryFee.value || 0);
@@ -3885,7 +3954,7 @@ function saveStoreManagerForm(event) {
   else state.stores.push(store);
   state.stores = mergeStores([], state.stores);
   saveState();
-  renderStores();
+  refreshStoreDependentViews();
   hideStoreManagerEditor();
   alert("Store saved.");
 }
@@ -3899,7 +3968,7 @@ function deleteStoreManager() {
   if (!state.deletedStoreIds.includes(id)) state.deletedStoreIds.push(id);
   state.stores = state.stores.filter((item) => item.id !== id);
   saveState();
-  renderStores();
+  refreshStoreDependentViews();
   hideStoreManagerEditor();
 }
 
@@ -3929,9 +3998,7 @@ function saveStoreFromForm() {
   if (index >= 0) state.stores[index] = store;
   else state.stores.push(store);
   saveState();
-  renderStores();
-  renderStoreManager();
-  els.storeSelect.value = store.id;
+  refreshStoreDependentViews(store.id);
   alert("Store saved.");
 }
 
@@ -4431,6 +4498,7 @@ function attachEvents() {
     const printInvoice = event.target.closest("[data-print-invoice]");
     const caseButton = event.target.closest("[data-case-key]");
     const storeManagerItem = event.target.closest("[data-store-manager-id]");
+    const editRouteStore = event.target.closest("[data-edit-route-store]");
     const applyStoreGeo = event.target.closest("[data-apply-store-geo]");
     const applyStoreAddress = event.target.closest("[data-apply-store-address]");
     const productManagerItem = event.target.closest("[data-product-manager-key]");
@@ -4461,6 +4529,10 @@ function attachEvents() {
     }
     if (applyStoreAddress) {
       applyStoreGeoFromCheck(applyStoreAddress.dataset.applyStoreAddress, true);
+      return;
+    }
+    if (editRouteStore) {
+      editStoreFromRoute(editRouteStore.dataset.editRouteStore);
       return;
     }
     if (storeManagerItem) editStoreManager(storeManagerItem.dataset.storeManagerId);
@@ -5970,7 +6042,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=93";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=94";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

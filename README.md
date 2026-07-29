@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v93 route preflight verifies every Google Maps stop.
+Current live app version: v94 route store edit shortcuts, geo tag list, and better full-screen fit.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
