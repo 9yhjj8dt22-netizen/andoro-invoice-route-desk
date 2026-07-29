@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-    workerPath: "assets/vendor/tesseract/worker.min.js?v=95",
+    workerPath: "assets/vendor/tesseract/worker.min.js?v=96",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -297,6 +297,7 @@ const els = {
   addStoreFacing: document.querySelector("#addStoreFacing"),
   storeManagerShelfInfo: document.querySelector("#storeManagerShelfInfo"),
   tagStoreLocation: document.querySelector("#tagStoreLocation"),
+  askChatGptStoreGeo: document.querySelector("#askChatGptStoreGeo"),
   checkStoreAddresses: document.querySelector("#checkStoreAddresses"),
   storeAddressCheckStatus: document.querySelector("#storeAddressCheckStatus"),
   storeAddressCheckList: document.querySelector("#storeAddressCheckList"),
@@ -2402,6 +2403,48 @@ function googleMapsSearchUrl(name = "", address = "") {
   return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
 }
 
+function chatGptGeoPrompt(store = {}) {
+  const name = String(store.name || "").trim() || "Unknown store";
+  const address = String(store.address || "").trim() || "No address saved";
+  return [
+    "Find the most accurate latitude and longitude for this customer/store.",
+    "",
+    `Store name: ${name}`,
+    `Saved address: ${address}`,
+    "",
+    "Use the store name and address together. If the saved address has extra invoice/contact text, clean it up first.",
+    "Verify the result against Google Maps or another reliable map source.",
+    "If there are multiple possible locations, choose the one that best matches the saved city/state/ZIP and say it needs review.",
+    "",
+    "Return only this format:",
+    "Latitude: <number>",
+    "Longitude: <number>",
+    "Map address: <verified address>",
+    "Confidence: <High / Needs review>"
+  ].join("\n");
+}
+
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function askChatGptForStoreGeo(store = {}) {
+  const promptText = chatGptGeoPrompt(store);
+  const opened = window.open("https://chatgpt.com/", "_blank", "noreferrer");
+  const copied = await copyTextToClipboard(promptText);
+  if (copied) {
+    alert("I copied the coordinate prompt. Paste it into ChatGPT, then paste Latitude and Longitude back into this store.");
+    return;
+  }
+  window.prompt("Copy this prompt into ChatGPT, then paste the Latitude and Longitude back into this store:", promptText);
+  if (!opened) alert("ChatGPT may have been blocked by the browser. Open chatgpt.com manually if needed.");
+}
+
 function stateMatches(targetState = "", resultState = "", displayAddress = "") {
   const target = String(targetState || "").trim().toUpperCase();
   if (!target) return false;
@@ -3599,6 +3642,7 @@ function renderGeoNeededPanel() {
           </div>
           <div class="button-row">
             <button class="secondary-button compact-slot-button" data-store-manager-id="${escapeAttribute(store.id)}" type="button">Edit store</button>
+            <button class="secondary-button compact-slot-button" data-ask-chatgpt-geo="${escapeAttribute(store.id)}" type="button">Ask ChatGPT</button>
             <a class="map-link" href="${escapeAttribute(googleMapsSearchUrl(store.name, store.address))}" target="_blank" rel="noreferrer">Google</a>
           </div>
         </article>
@@ -4435,6 +4479,10 @@ function attachEvents() {
   els.clearStoreManager.addEventListener("click", hideStoreManagerEditor);
   els.deleteStoreManager.addEventListener("click", deleteStoreManager);
   els.tagStoreLocation.addEventListener("click", tagStoreCurrentLocation);
+  els.askChatGptStoreGeo?.addEventListener("click", () => askChatGptForStoreGeo({
+    name: els.storeManagerName.value,
+    address: els.storeManagerAddress.value
+  }));
   els.productManagerForm.addEventListener("submit", saveProductManagerForm);
   els.productSearch.addEventListener("input", renderProductsManager);
   els.newProductRecord.addEventListener("click", resetProductManagerForm);
@@ -4499,6 +4547,7 @@ function attachEvents() {
     const caseButton = event.target.closest("[data-case-key]");
     const storeManagerItem = event.target.closest("[data-store-manager-id]");
     const editRouteStore = event.target.closest("[data-edit-route-store]");
+    const askChatGptGeo = event.target.closest("[data-ask-chatgpt-geo]");
     const applyStoreGeo = event.target.closest("[data-apply-store-geo]");
     const applyStoreAddress = event.target.closest("[data-apply-store-address]");
     const productManagerItem = event.target.closest("[data-product-manager-key]");
@@ -4533,6 +4582,11 @@ function attachEvents() {
     }
     if (editRouteStore) {
       editStoreFromRoute(editRouteStore.dataset.editRouteStore);
+      return;
+    }
+    if (askChatGptGeo) {
+      const store = (state.stores || []).find((item) => item.id === askChatGptGeo.dataset.askChatgptGeo);
+      if (store) askChatGptForStoreGeo(store);
       return;
     }
     if (storeManagerItem) editStoreManager(storeManagerItem.dataset.storeManagerId);
@@ -6042,7 +6096,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=95";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=96";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
