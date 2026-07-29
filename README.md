@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v90 structured store facing tracker.
+Current live app version: v91 compact route stops, better routing, expense edits, prospects on summary.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

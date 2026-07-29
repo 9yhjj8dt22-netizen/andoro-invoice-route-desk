@@ -900,6 +900,11 @@ th {
   font-weight: 900;
 }
 
+.route-add-another {
+  width: 100%;
+  min-height: 48px;
+}
+
 .route-slot-attach select {
   min-width: 260px;
   flex: 1 1 320px;
