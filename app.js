@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-    workerPath: "assets/vendor/tesseract/worker.min.js?v=92",
+    workerPath: "assets/vendor/tesseract/worker.min.js?v=93",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -5616,35 +5616,86 @@ function routeStopFromEntry(entry) {
     scans: entry.scans || [scan].filter(Boolean),
     scanIds: (entry.scans || [scan]).map((item) => item.id).filter(Boolean),
     store,
-    name: scan.customer || store.name || "Route stop",
-    address: scan.address || store.address || "",
-    lat: Number(scan.lat || store.lat || 0),
-    lng: Number(scan.lng || store.lng || 0),
+    name: store.name || scan.customer || "Route stop",
+    address: store.address || scan.address || "",
+    lat: Number(store.lat || scan.lat || 0),
+    lng: Number(store.lng || scan.lng || 0),
     dt: scan.dt || store.dt || "",
     priority: scanHasInvoice(scan) ? "high" : "normal"
   };
 }
 
+function hasUsableMapCoordinates(stop = {}) {
+  const lat = Number(stop.lat);
+  const lng = Number(stop.lng);
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
+}
+
+function saveStopCoordinates(stop, coords, source = "route-preflight") {
+  if (!coords || !Number(coords.lat) || !Number(coords.lng)) return false;
+  const lat = Number(coords.lat);
+  const lng = Number(coords.lng);
+  stop.lat = lat;
+  stop.lng = lng;
+  if (stop.scan) {
+    stop.scan.lat = lat;
+    stop.scan.lng = lng;
+  }
+  (stop.scans || []).forEach((scan) => {
+    scan.lat = lat;
+    scan.lng = lng;
+  });
+  if (stop.store?.id) {
+    stop.store.lat = lat;
+    stop.store.lng = lng;
+    stop.store.geoVerified = true;
+    stop.store.geoSource = source;
+    stop.store.geoDisplayName = coords.displayName || stop.store.geoDisplayName || "";
+    stop.store.geoUpdatedAt = new Date().toISOString();
+  }
+  return true;
+}
+
+async function preflightRouteStopsForGoogle(stops = []) {
+  const unresolved = [];
+  let updated = 0;
+  for (const stop of stops) {
+    if (hasUsableMapCoordinates(stop)) continue;
+    if (!addressLooksMappable(stop.address || "")) {
+      unresolved.push({ stop, reason: "Address is missing, incomplete, or too weak for Google Maps." });
+      continue;
+    }
+    try {
+      const coords = await geocodeAddress(stop.address, stop.name);
+      if (coords && saveStopCoordinates(stop, coords, "route-preflight")) {
+        updated += 1;
+      } else {
+        unresolved.push({ stop, reason: "No strong map match found." });
+      }
+      await new Promise((resolve) => setTimeout(resolve, 900));
+    } catch {
+      unresolved.push({ stop, reason: "Address check could not finish." });
+    }
+  }
+  return { updated, unresolved };
+}
+
+function routePreflightProblemText(problems = []) {
+  return problems
+    .slice(0, 10)
+    .map(({ stop, reason }, index) => `${index + 1}. ${stop.name || "Stop"} - ${reason}\n${stop.address || "No address saved"}`)
+    .join("\n\n");
+}
+
 async function geocodeRouteStops(stops = []) {
-  const missing = stops.filter((stop) => stop.address && (!Number(stop.lat) || !Number(stop.lng)));
+  const missing = stops.filter((stop) => stop.address && !hasUsableMapCoordinates(stop));
   if (!missing.length) return { updated: 0, missing: 0 };
   let updated = 0;
   for (const stop of missing) {
     try {
       const coords = await geocodeAddress(stop.address, stop.name);
       if (coords) {
-        stop.lat = coords.lat;
-        stop.lng = coords.lng;
-        stop.scan.lat = coords.lat;
-        stop.scan.lng = coords.lng;
-        (stop.scans || []).forEach((scan) => {
-          scan.lat = coords.lat;
-          scan.lng = coords.lng;
-        });
-        if (stop.store?.id) {
-          stop.store.lat = coords.lat;
-          stop.store.lng = coords.lng;
-        }
+        saveStopCoordinates(stop, coords, "route-build");
         updated += 1;
       }
       await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -5919,7 +5970,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=92";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=93";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];
@@ -6146,21 +6197,27 @@ async function buildRouteFromDeliverySlots() {
     });
     entry.scan = entry.scans[0];
   });
-  els.routeDayStatus.textContent = "Finding stop locations and building the most efficient route...";
+  els.routeDayStatus.textContent = "Checking every stop before Google Maps export...";
   const routeStops = filledSlots.map(routeStopFromEntry);
-  const weakAddresses = weakRouteAddresses(routeStops);
-  if (weakAddresses.length && !confirm(`Check these store addresses before exporting to Google Maps:\n\n${weakAddresses.map((stop) => `- ${stop.name}: ${stop.address || "No address"}`).join("\n")}\n\nContinue building the route anyway?`)) {
+  const preflight = await preflightRouteStopsForGoogle(routeStops);
+  if (preflight.unresolved.length) {
     els.buildRoute.disabled = false;
     els.buildRoute.textContent = originalLabel;
+    els.routeDayStatus.textContent = `${preflight.unresolved.length} stop${preflight.unresolved.length === 1 ? "" : "s"} need address/coordinate fixes before Google Maps export.`;
+    alert(`Route not built yet. These stops need to be fixed before Google Maps export:\n\n${routePreflightProblemText(preflight.unresolved)}\n\nGo to Stores, fix the address or tag the location, then build the route again.`);
+    saveState();
     renderRouteDayStatus();
     return;
   }
+  els.routeDayStatus.textContent = "All stops can be exported to Google Maps. Building the most efficient route...";
   const geocodeResult = await geocodeRouteStops(routeStops);
-  const routableStops = routeStops.filter((stop) => Number(stop.lat) && Number(stop.lng));
-  if (!routableStops.length) {
+  const routableStops = routeStops.filter(hasUsableMapCoordinates);
+  if (routableStops.length !== routeStops.length) {
+    const missingStops = routeStops.filter((stop) => !hasUsableMapCoordinates(stop));
     els.buildRoute.disabled = false;
     els.buildRoute.textContent = originalLabel;
-    alert("I could not find map locations for the selected stores. Check the store addresses, then build the route again.");
+    els.routeDayStatus.textContent = `${missingStops.length} stop${missingStops.length === 1 ? "" : "s"} still cannot be mapped.`;
+    alert(`Route not built. Google Maps still cannot use every stop:\n\n${missingStops.map((stop) => `- ${stop.name}: ${stop.address || "No address"}`).join("\n")}`);
     saveState();
     render();
     return;
@@ -6194,7 +6251,7 @@ async function buildRouteFromDeliverySlots() {
   els.buildRoute.disabled = false;
   els.buildRoute.textContent = originalLabel;
   const miles = routeDistance(optimizedStops, fixedRouteOrigin());
-  alert(`Route built in the most efficient order from 92 Produce Row and returning to 92 Produce Row. ${optimizedStops.length} stop${optimizedStops.length === 1 ? "" : "s"} routed, about ${miles.toFixed(1)} miles before traffic.${geocodeResult.missing ? ` ${geocodeResult.missing} stop${geocodeResult.missing === 1 ? "" : "s"} could not be mapped and stayed at the end.` : ""} ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${result.skippedStoreReview ? ` ${result.skippedStoreReview} invoice${result.skippedStoreReview === 1 ? "" : "s"} not saved because the store was not approved.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
+  alert(`Route built in the most efficient order from 92 Produce Row and returning to 92 Produce Row. ${optimizedStops.length} stop${optimizedStops.length === 1 ? "" : "s"} verified for Google Maps, about ${miles.toFixed(1)} miles before traffic.${preflight.updated ? ` ${preflight.updated} stop${preflight.updated === 1 ? "" : "s"} got fresh coordinates.` : ""}${geocodeResult.missing ? ` ${geocodeResult.missing} stop${geocodeResult.missing === 1 ? "" : "s"} could not be mapped and stayed at the end.` : ""} ${result.saved} invoice${result.saved === 1 ? "" : "s"} added.${result.skipped ? ` ${result.skipped} already added.` : ""}${result.skippedStoreReview ? ` ${result.skippedStoreReview} invoice${result.skippedStoreReview === 1 ? "" : "s"} not saved because the store was not approved.` : ""}${missingInvoice ? ` ${missingInvoice} stop${missingInvoice === 1 ? "" : "s"} still need an invoice attached.` : ""}${reviewCount ? ` ${reviewCount} attached invoice${reviewCount === 1 ? "" : "s"} need review before saving.` : ""}${result.lisaCount ? ` ${result.lisaCount} office-ordered stop${result.lisaCount === 1 ? "" : "s"} saved for records/stores.` : ""}`);
 }
 
 function saveScannedInvoices() {
