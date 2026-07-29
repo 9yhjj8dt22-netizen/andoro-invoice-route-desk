@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-    workerPath: "assets/vendor/tesseract/worker.min.js?v=97",
+    workerPath: "assets/vendor/tesseract/worker.min.js?v=98",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -2365,7 +2365,7 @@ function googleMapsUrl(stops) {
 }
 
 function currentRouteMapStops() {
-  const ordered = optimizedStops();
+  const ordered = getOrderedStops();
   if (ordered.length) return ordered;
   return routeSlotPrimaryScans()
     .filter((scan) => scan.address || (Number(scan.lat) && Number(scan.lng)))
@@ -4532,16 +4532,22 @@ function clearRouteDay() {
 }
 
 function openRouteSummaryPrintView() {
-  syncAllRouteInvoiceLineFields();
-  const win = window.open("", "_blank");
-  if (!win) {
-    alert("Pop-up blocking kept the route summary from opening.");
-    return;
+  try {
+    syncAllRouteInvoiceLineFields();
+    const html = routeSummaryHtml();
+    const win = window.open("", "_blank");
+    if (!win) {
+      alert("Pop-up blocking kept the route summary from opening.");
+      return;
+    }
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    win.print();
+  } catch (error) {
+    console.error(error);
+    alert("The route summary print preview could not open. I saved the issue in the console; try Save as PDF or refresh and try again.");
   }
-  win.document.write(routeSummaryHtml());
-  win.document.close();
-  win.focus();
-  win.print();
 }
 
 function printRouteSummary() {
@@ -4549,8 +4555,13 @@ function printRouteSummary() {
 }
 
 function saveRouteSummaryPdf() {
-  syncAllRouteInvoiceLineFields();
-  downloadBlob(buildRouteSummaryPdfBlob(), routeSummaryPdfFileName());
+  try {
+    syncAllRouteInvoiceLineFields();
+    downloadBlob(buildRouteSummaryPdfBlob(), routeSummaryPdfFileName());
+  } catch (error) {
+    console.error(error);
+    alert("The route summary PDF could not be saved. Refresh the app and try again.");
+  }
 }
 
 function attachEvents() {
@@ -6184,7 +6195,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=97";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=98";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

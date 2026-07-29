@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v97 prints route build summary and Google Maps link.
+Current live app version: v98 fixes route summary print and PDF buttons.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
