@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "91";
+        const currentVersion = "92";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v91")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v92")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=91">
+    <link rel="stylesheet" href="styles.css?v=92">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -769,9 +769,9 @@
       </div>
     </template>
 
-    <script src="assets/vendor/pdfjs/pdf.min.js?v=91"></script>
-    <script src="assets/vendor/tesseract/tesseract.min.js?v=91"></script>
-    <script src="app.js?v=91"></script>
+    <script src="assets/vendor/pdfjs/pdf.min.js?v=92"></script>
+    <script src="assets/vendor/tesseract/tesseract.min.js?v=92"></script>
+    <script src="app.js?v=92"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");

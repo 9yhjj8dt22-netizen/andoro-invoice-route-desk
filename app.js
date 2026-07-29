@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-  workerPath: "assets/vendor/tesseract/worker.min.js?v=91",
+    workerPath: "assets/vendor/tesseract/worker.min.js?v=92",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -2357,6 +2357,48 @@ function addressLooksMappable(address = "") {
   return hasStreetNumber && hasStreetWord && hasCityStateOrZip;
 }
 
+function cityStateZipFromAddress(address = "") {
+  const lines = String(address || "").split(/\n|,/).map((line) => line.trim()).filter(Boolean);
+  const cityStateLine = lines.find((line) => /\b[A-Z]{2}\b\s*\d{5}(?:-\d{4})?\b/i.test(line)) || "";
+  const match = cityStateLine.match(/(.+?)\s+([A-Z]{2})\s+(\d{5})(?:-\d{4})?/i);
+  if (!match) return { city: "", state: "", zip: "" };
+  return {
+    city: match[1].replace(/^[,\s]+|[,\s]+$/g, "").trim(),
+    state: match[2].toUpperCase(),
+    zip: match[3]
+  };
+}
+
+function cleanStoreSearchName(name = "") {
+  return String(name || "")
+    .replace(/,?\s*(frozen|food|manager|mgr|sal|office|ordered by office)\b.*$/i, "")
+    .replace(/\b\d{3,5}\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function googleMapsSearchUrl(name = "", address = "") {
+  const query = [cleanStoreSearchName(name), cleanRouteAddress(address) || address].filter(Boolean).join(", ");
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query)}`;
+}
+
+function stateMatches(targetState = "", resultState = "", displayAddress = "") {
+  const target = String(targetState || "").trim().toUpperCase();
+  if (!target) return false;
+  const result = normalizedName(resultState);
+  const display = normalizedName(displayAddress);
+  const names = {
+    MO: ["mo", "missouri"],
+    IL: ["il", "illinois"]
+  };
+  const choices = names[target] || [normalizedName(target)];
+  const displayWords = display.split(" ");
+  return choices.some((choice) => {
+    if (choice.length <= 2) return result === choice || displayWords.includes(choice);
+    return result.includes(choice) || display.includes(choice);
+  });
+}
+
 function weakRouteAddresses(stops = []) {
   return stops.filter((stop) => !addressLooksMappable(stop.address || ""));
 }
@@ -3524,11 +3566,12 @@ function renderStoreManager() {
     const productCount = (store.products || []).filter((product) => !isDeliveryItem(product)).length;
     const facingCount = facingsForStore(store).length;
     const hasGeo = Boolean(Number(store.lat) && Number(store.lng));
+    const geoStatus = hasGeo ? (store.geoVerified ? "Geo verified" : "Geo saved") : "Needs geo";
     const addressStatus = addressLooksMappable(store.address || "") ? "Address ready" : "Check address";
     button.innerHTML = `
       <strong>${escapeHtml(store.name)}</strong>
       <span>${escapeHtml([store.address?.split("\n").at(-1), store.orderBlocked ? "Ordered by office" : "Salesman order allowed"].filter(Boolean).join(" - "))}</span>
-      <small>${productCount} product${productCount === 1 ? "" : "s"} - ${facingCount} facing${facingCount === 1 ? "" : "s"}${store.orderBlocked ? " - Office" : ""} - ${hasGeo ? "Geo saved" : "Needs geo"} - ${addressStatus}</small>
+      <small>${productCount} product${productCount === 1 ? "" : "s"} - ${facingCount} facing${facingCount === 1 ? "" : "s"}${store.orderBlocked ? " - Office" : ""} - ${geoStatus} - ${addressStatus}</small>
     `;
     els.storeManagerList.append(button);
   });
@@ -3540,24 +3583,38 @@ function renderStoreAddressCheckResults() {
   if (!storeAddressChecks.length) return;
   storeAddressChecks.forEach((check) => {
     const card = document.createElement("div");
-    card.className = `address-check-card ${check.suggestion ? "found" : "missing"}`;
+    const accepted = Boolean(check.suggestion?.accepted);
+    card.className = `address-check-card ${accepted ? "found" : "missing"}${check.suggestion && !accepted ? " needs-review" : ""}`;
     const savedGeo = check.hadGeo ? "Saved coordinates exist" : "No saved coordinates";
     const addressNote = check.weakAddress ? "Address may be too weak for routing" : "Saved address looks usable";
+    const confidence = check.suggestion ? `${Math.max(0, Math.round(check.suggestion.confidence || 0))}% confidence` : "No match";
+    const matchStatus = accepted ? "Good match - ready to save" : check.suggestion ? "Needs review - not saved" : "No reliable match found";
+    const googleUrl = check.suggestion?.googleUrl || googleMapsSearchUrl(check.name, check.address);
     card.innerHTML = `
       <div>
         <strong>${escapeHtml(check.name)}</strong>
         <span>${escapeHtml(check.address || "No saved address")}</span>
         <small>${escapeHtml(`${savedGeo} - ${addressNote}`)}</small>
+        <small>${escapeHtml(matchStatus)}</small>
       </div>
       <div>
         ${check.suggestion ? `
           <span class="address-suggestion">${escapeHtml(check.suggestion.displayName || `${check.suggestion.lat}, ${check.suggestion.lng}`)}</span>
-          <small>${Number(check.suggestion.lat).toFixed(6)}, ${Number(check.suggestion.lng).toFixed(6)}</small>
+          <small>${Number(check.suggestion.lat).toFixed(6)}, ${Number(check.suggestion.lng).toFixed(6)} - ${escapeHtml(confidence)}</small>
+          <small>${escapeHtml((check.suggestion.reasons || []).join(", ") || `Searched: ${check.suggestion.query || "map search"}`)}</small>
           <div class="button-row">
-            <button class="secondary-button" data-apply-store-geo="${escapeHtml(check.storeId)}" type="button">Save coordinates</button>
-            <button class="ghost-button" data-apply-store-address="${escapeHtml(check.storeId)}" type="button">Use suggested address</button>
+            ${accepted ? `<button class="secondary-button" data-apply-store-geo="${escapeHtml(check.storeId)}" type="button">Save verified coordinates</button>` : ""}
+            ${accepted ? `<button class="ghost-button" data-apply-store-address="${escapeHtml(check.storeId)}" type="button">Use suggested address</button>` : ""}
+            <a class="map-link" href="${escapeAttribute(googleUrl)}" target="_blank" rel="noreferrer">Verify in Google Maps</a>
+            <button class="ghost-button" data-store-manager-id="${escapeHtml(check.storeId)}" type="button">Edit manually</button>
           </div>
-        ` : "<span>No map match found. Edit the address or tag current location.</span>"}
+        ` : `
+          <span>No reliable map match found. Edit the address, tag current location, or verify it in Google Maps.</span>
+          <div class="button-row">
+            <a class="map-link" href="${escapeAttribute(googleUrl)}" target="_blank" rel="noreferrer">Search in Google Maps</a>
+            <button class="ghost-button" data-store-manager-id="${escapeHtml(check.storeId)}" type="button">Edit manually</button>
+          </div>
+        `}
       </div>
     `;
     els.storeAddressCheckList.append(card);
@@ -3578,7 +3635,7 @@ async function checkStoreAddresses() {
     els.storeAddressCheckStatus.textContent = `Checking ${index + 1} of ${state.stores.length}: ${store.name}`;
     let suggestion = null;
     try {
-      suggestion = await geocodeAddress(store.address || "", store.name || "");
+      suggestion = await geocodeAddressDetailed(store.address || "", store.name || "");
       await new Promise((resolve) => setTimeout(resolve, 1100));
     } catch {
       suggestion = null;
@@ -3593,9 +3650,10 @@ async function checkStoreAddresses() {
     });
     renderStoreAddressCheckResults();
   }
-  const found = storeAddressChecks.filter((check) => check.suggestion).length;
+  const found = storeAddressChecks.filter((check) => check.suggestion?.accepted).length;
+  const needsReview = storeAddressChecks.filter((check) => check.suggestion && !check.suggestion.accepted).length;
   const missingGeo = storeAddressChecks.filter((check) => !check.hadGeo).length;
-  els.storeAddressCheckStatus.textContent = `Checked ${state.stores.length} stores. ${found} map matches found. ${missingGeo} stores started without saved coordinates.`;
+  els.storeAddressCheckStatus.textContent = `Checked ${state.stores.length} stores. ${found} verified matches found. ${needsReview} need review. ${missingGeo} stores started without saved coordinates.`;
   els.checkStoreAddresses.disabled = false;
 }
 
@@ -3603,9 +3661,14 @@ function applyStoreGeoFromCheck(storeId, includeAddress = false) {
   const check = storeAddressChecks.find((item) => item.storeId === storeId);
   const store = (state.stores || []).find((item) => item.id === storeId);
   if (!check?.suggestion || !store) return;
+  if (!check.suggestion.accepted && !confirm("This match is not strong enough to trust automatically. Only continue if you personally verified it in Google Maps. Save these coordinates anyway?")) return;
   if (includeAddress && !confirm(`Replace the saved address for ${store.name} with the suggested map address?`)) return;
   store.lat = Number(check.suggestion.lat);
   store.lng = Number(check.suggestion.lng);
+  store.geoVerified = true;
+  store.geoSource = "address-check";
+  store.geoDisplayName = check.suggestion.displayName || "";
+  store.geoUpdatedAt = new Date().toISOString();
   if (includeAddress) store.address = check.suggestion.displayName || store.address || "";
   check.hadGeo = true;
   check.address = store.address || "";
@@ -5593,35 +5656,117 @@ async function geocodeRouteStops(stops = []) {
 }
 
 async function geocodeAddress(address = "", name = "") {
+  const match = await geocodeAddressDetailed(address, name);
+  if (!match?.accepted) return null;
+  return {
+    lat: match.lat,
+    lng: match.lng,
+    displayName: match.displayName,
+    confidence: match.confidence,
+    query: match.query,
+    reasons: match.reasons
+  };
+}
+
+async function geocodeAddressDetailed(address = "", name = "") {
   const cleanedAddress = cleanRouteAddress(address);
-  const cityState = locationFromAddress(cleanedAddress || address);
+  const location = cityStateZipFromAddress(cleanedAddress || address);
+  const cityState = [location.city, location.state].filter(Boolean).join(", ");
+  const storeName = cleanStoreSearchName(name);
   const queries = [
-    [name, cleanedAddress].filter(Boolean).join(", "),
+    [storeName, cleanedAddress].filter(Boolean).join(", "),
+    [storeName, cityState, location.zip].filter(Boolean).join(", "),
+    [storeName, location.city, location.state].filter(Boolean).join(", "),
     cleanedAddress,
-    [name, cityState, "Missouri"].filter(Boolean).join(", "),
-    [name, address].filter(Boolean).join(", "),
+    [storeName, location.city, location.state || "MO"].filter(Boolean).join(", "),
+    [storeName, address].filter(Boolean).join(", "),
     address
   ].filter(Boolean);
   const uniqueQueries = [...new Set(queries)];
-  let results = [];
+  let best = null;
   for (const query of uniqueQueries) {
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=3&countrycodes=us&q=${encodeURIComponent(query)}`);
-    results = await response.json();
-    if (results?.[0]) break;
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&countrycodes=us&q=${encodeURIComponent(query)}`);
+    const results = await response.json();
+    for (const result of results || []) {
+      const scored = scoreGeocodeResult(result, address, name, query);
+      if (!best || scored.confidence > best.confidence) best = scored;
+    }
+    if (best?.accepted && best.confidence >= 90) break;
     await new Promise((resolve) => setTimeout(resolve, 350));
   }
-  if (!results?.[0]) return null;
+  return best;
+}
+
+function scoreGeocodeResult(result = {}, address = "", name = "", query = "") {
+  const displayName = result.display_name || "";
+  const displayAddress = normalizedAddress(displayName);
+  const target = addressParts(address);
+  const targetLocation = cityStateZipFromAddress(address);
+  const resultAddress = result.address || {};
+  const resultZip = resultAddress.postcode || displayName.match(/\b\d{5}\b/)?.[0] || "";
+  const resultState = (resultAddress.state_code || resultAddress.state || "").toString();
+  const resultCity = [
+    resultAddress.city,
+    resultAddress.town,
+    resultAddress.village,
+    resultAddress.hamlet,
+    resultAddress.county
+  ].filter(Boolean).join(" ");
+  const resultName = normalizedName([resultAddress.name, resultAddress.shop, resultAddress.amenity, displayName].filter(Boolean).join(" "));
+  const storeName = normalizedName(cleanStoreSearchName(name));
+  const reasons = [];
+  let confidence = 0;
+  if (target.streetNumber && displayAddress.includes(target.streetNumber)) {
+    confidence += 32;
+    reasons.push("street number matched");
+  }
+  const sharedStreetWords = target.streetWords.filter((word) => displayAddress.includes(word));
+  if (sharedStreetWords.length >= 2) {
+    confidence += 28;
+    reasons.push("street name matched");
+  } else if (sharedStreetWords.length === 1) {
+    confidence += 14;
+    reasons.push("part of street matched");
+  }
+  if (target.zip && resultZip === target.zip) {
+    confidence += 24;
+    reasons.push("ZIP matched");
+  }
+  if (targetLocation.city && normalizedName(resultCity).includes(normalizedName(targetLocation.city))) {
+    confidence += 12;
+    reasons.push("city matched");
+  }
+  if (stateMatches(targetLocation.state, resultState, displayName)) {
+    confidence += 8;
+    reasons.push("state matched");
+  }
+  if (storeName && storeName.split(" ").some((word) => word.length > 3 && resultName.includes(word))) {
+    confidence += 10;
+    reasons.push("store name matched");
+  }
+  if (!target.streetNumber || !target.streetWords.length) confidence -= 20;
+  if (target.zip && resultZip && resultZip !== target.zip) {
+    confidence -= 35;
+    reasons.push("ZIP did not match");
+  }
+  const accepted = confidence >= 72 && Boolean(target.streetNumber) && (Boolean(target.zip && resultZip === target.zip) || sharedStreetWords.length >= 1);
   return {
-    lat: Number(results[0].lat),
-    lng: Number(results[0].lon),
-    displayName: results[0].display_name || ""
+    lat: Number(result.lat),
+    lng: Number(result.lon),
+    displayName,
+    query,
+    confidence,
+    accepted,
+    reasons,
+    googleUrl: googleMapsSearchUrl(name, address)
   };
 }
 
 function cleanRouteAddress(address = "") {
   const lines = String(address || "").split(/\n|,/).map((line) => line.trim()).filter(Boolean);
-  const useful = lines.filter((line) => /\d{2,6}|(?:\b[A-Z]{2}\b\s*\d{5})|missouri|illinois|\bMO\b|\bIL\b/i.test(line));
-  return (useful.length ? useful : lines).join(", ");
+  const noise = /\b(frozen|food|manager|mgr|main tele|alt tele|phone|fax|email|e-mail|invoice|terms|credit card|delivery|charge|salesman|rep)\b/i;
+  const useful = lines.filter((line) => !noise.test(line) && /\d{2,6}|(?:\b[A-Z]{2}\b\s*\d{5})|missouri|illinois|\bMO\b|\bIL\b/i.test(line));
+  return (useful.length ? useful : lines.filter((line) => !noise.test(line))).join(", ");
 }
 
 function applyOptimizedRouteStops(stops = []) {
@@ -5774,7 +5919,7 @@ async function readImageInvoice(imageSource, label) {
 }
 
 async function readPdfInvoice(file) {
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=91";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "assets/vendor/pdfjs/pdf.worker.min.js?v=92";
   const data = await file.arrayBuffer();
   const pdf = await pdfjsLib.getDocument({ data }).promise;
   const pages = [];

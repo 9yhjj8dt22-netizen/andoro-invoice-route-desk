@@ -424,6 +424,10 @@ textarea {
   border-left: 5px solid var(--green);
 }
 
+.address-check-card.needs-review {
+  border-left: 5px solid #d98b00;
+}
+
 .address-check-card.missing {
   border-left: 5px solid var(--red);
 }
