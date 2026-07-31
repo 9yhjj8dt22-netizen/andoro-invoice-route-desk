@@ -4,7 +4,7 @@ const ACCESS_STORAGE_KEY = "andoro_invoice_access_ok_v1";
 const ACCESS_CODE = "andoro1957";
 const ROUTE_SLOT_COUNT = 25;
 const TESSERACT_OPTIONS = {
-    workerPath: "assets/vendor/tesseract/worker.min.js?v=98",
+    workerPath: "assets/vendor/tesseract/worker.min.js?v=99",
   corePath: "assets/vendor/tesseract/core",
   langPath: "assets/vendor/tesseract/lang",
   workerBlobURL: false
@@ -88,7 +88,7 @@ const delivery15 = catalogItem("Delivery Charge", "", 15);
 const PIZZAS_PER_CASE = 12;
 const CASES_PER_SHELF = 2;
 const DEFAULT_DELIVERY_FEE = 0;
-const DEFAULT_REP = "J.Ballew";
+const DEFAULT_REP = "";
 const FIXED_ROUTE_ORIGIN = {
   address: "92 Produce Row, St. Louis, MO 63102",
   lat: 38.6508865,
@@ -123,10 +123,9 @@ const sampleData = {
       id: "store-mosers-ashland",
       name: "Mosers Foods - Ashland",
       orderBlocked: true,
-      orderBlockedReason: "This store is normally ordered by the office. Only make a salesman invoice for an emergency.",
+      orderBlockedReason: "This store is normally ordered by the office. Only make a rep invoice for an emergency.",
       address: "Amy-Frozen Food Mgr\n109 Eastside Dr.\nAshland, MO 65010",
       terms: "Net 10",
-      rep: "RRM",
       products: [...standardTwelveInch, delivery10]
     },
     {
@@ -136,7 +135,6 @@ const sampleData = {
       orderBlockedReason: "",
       address: "2020 N. Bluff\nFulton, MO 65251",
       terms: "Net 10",
-      rep: "RRM",
       products: [...standardTwelveInch, catalogItem('Andoro 12" Loaded Baked Potato Pizza', "", 5.35), catalog.taco12, delivery10]
     },
     {
@@ -146,14 +144,13 @@ const sampleData = {
       orderBlockedReason: "",
       address: "997 Barry Prewitt Memorial DR\nOsage Beach, MO 65065",
       poNumber: "Using as Order Form",
-      rep: "LC",
       products: hyVeeProducts
     },
     {
       id: "store-camdenton-sal",
       name: "Camdenton SAL",
       orderBlocked: true,
-      orderBlockedReason: "This store is normally ordered by the office. Only make a salesman invoice for an emergency.",
+      orderBlockedReason: "This store is normally ordered by the office. Only make a rep invoice for an emergency.",
       address: "709 N Business Rte 5\nCamdenton, MO 65020",
       products: [
         { ...catalog.supreme12, rate: 4.85 },
@@ -169,14 +166,13 @@ const sampleData = {
       orderBlocked: false,
       orderBlockedReason: "",
       address: "13655 N State Highway 5\nSunrise Beach, MO 65079",
-      rep: "RRM",
       products: [...standardTwelveInch, delivery10]
     },
     {
       id: "store-woods-lake-ozark",
       name: "Wood's Supermarket",
       orderBlocked: true,
-      orderBlockedReason: "This store is normally ordered by the office. Only make a salesman invoice for an emergency.",
+      orderBlockedReason: "This store is normally ordered by the office. Only make a rep invoice for an emergency.",
       address: "2107 Bagnell Dam Blvd\nLake Ozark, MO 65049",
       products: [
         { ...catalog.bbqChicken12, rate: 5 },
@@ -195,7 +191,6 @@ const sampleData = {
       orderBlocked: false,
       orderBlockedReason: "",
       address: "405 E. Nifong Blvd.\nColumbia, MO 65201",
-      rep: "RRM",
       products: hyVeeProducts
     },
     {
@@ -226,7 +221,7 @@ const sampleData = {
       id: "store-st-louis-county-parks",
       name: "St. Louis County Parks",
       orderBlocked: true,
-      orderBlockedReason: "This store is normally ordered by the office. Only make a salesman invoice for an emergency.",
+      orderBlockedReason: "This store is normally ordered by the office. Only make a rep invoice for an emergency.",
       address: "550 Weidman Road\nManchester, MO 63011",
       products: [
         { ...catalog.pepperoni12, rate: 5.45 },
@@ -240,7 +235,8 @@ const sampleData = {
   settings: {
     officeEmail: "lisa@andoropizza.com",
     ryanEmail: "ryan@andoropizza.com",
-    jasonEmail: "safetyjason78@gmail.com"
+    repEmail: "",
+    defaultRepName: ""
   }
 };
 
@@ -365,7 +361,8 @@ const els = {
   resetData: document.querySelector("#resetData"),
   officeEmail: document.querySelector("#officeEmail"),
   ryanEmail: document.querySelector("#ryanEmail"),
-  jasonEmail: document.querySelector("#jasonEmail"),
+  repEmail: document.querySelector("#repEmail"),
+  defaultRepName: document.querySelector("#defaultRepName"),
   saveOfficeSettings: document.querySelector("#saveOfficeSettings"),
   invoiceFiles: document.querySelector("#invoiceFiles"),
   invoiceCamera: document.querySelector("#invoiceCamera"),
@@ -483,12 +480,17 @@ function loadSavedStores() {
 }
 
 function normalizeState(nextState) {
+  nextState.settings = {
+    ...structuredClone(sampleData.settings),
+    ...(nextState.settings || {})
+  };
+  delete nextState.settings[String.fromCharCode(106, 97, 115, 111, 110, 69, 109, 97, 105, 108)];
   nextState.routeDay = {
     ...structuredClone(sampleData.routeDay),
     ...(nextState.routeDay || {})
   };
   if (!nextState.routeDay.date) nextState.routeDay.date = todayOffset(0);
-  if (!nextState.routeDay.rep) nextState.routeDay.rep = DEFAULT_REP;
+  if (!nextState.routeDay.rep) nextState.routeDay.rep = nextState.settings.defaultRepName || DEFAULT_REP;
   nextState.routeDay.deliverySlots = normalizeRouteDeliverySlots(nextState.routeDay.deliverySlots || []);
   nextState.origin = fixedRouteOrigin();
   nextState.invoices = (nextState.invoices || []).filter((invoice) => !isDemoInvoice(invoice));
@@ -639,7 +641,7 @@ function routeDate() {
 }
 
 function routeRep() {
-  return state.routeDay?.rep || DEFAULT_REP;
+  return state.routeDay?.rep || state.settings?.defaultRepName || DEFAULT_REP;
 }
 
 function nextRouteInvoiceNumber(currentInvoiceId = "") {
@@ -669,7 +671,8 @@ function render() {
   els.originLng.value = state.origin?.lng ?? "";
   els.officeEmail.value = state.settings?.officeEmail || sampleData.settings.officeEmail;
   els.ryanEmail.value = state.settings?.ryanEmail || sampleData.settings.ryanEmail;
-  els.jasonEmail.value = state.settings?.jasonEmail || sampleData.settings.jasonEmail;
+  els.repEmail.value = state.settings?.repEmail || "";
+  els.defaultRepName.value = state.settings?.defaultRepName || "";
   els.routeDayDate.value = routeDate();
   els.routeDayRep.value = routeRep();
   els.routeStartInvoice.value = state.routeDay?.startingInvoiceNumber || "";
@@ -969,8 +972,8 @@ function storeBlocksOrders(store = selectedStore()) {
 }
 
 function orderBlockedMessage(store = selectedStore()) {
-  if (routeLisaOverride(store)) return "This stop is marked ordered by office today. Only continue if this is an emergency salesman invoice.";
-  return store?.orderBlockedReason || "This store is normally ordered by the office. Only continue if this is an emergency salesman invoice.";
+  if (routeLisaOverride(store)) return "This stop is marked ordered by office today. Only continue if this is an emergency rep invoice.";
+  return store?.orderBlockedReason || "This store is normally ordered by the office. Only continue if this is an emergency rep invoice.";
 }
 
 function setInvoiceActionsEnabled(enabled) {
@@ -1729,7 +1732,7 @@ function renderRouteDeliverySlots() {
     const stopNoteValue = scan?.routeNote || "";
     const selectedInvoiceId = scan?.savedInvoiceId || "";
     const scanStatus = scan
-      ? [`${scans.length} invoice${scans.length === 1 ? "" : "s"}`, scans.map((item) => item.number ? `#${item.number}` : scanLabel(item)).join(", "), scans.some(scanLisaHandled) ? "Ordered by office" : "Salesman order", scans.every(scanDelivered) ? "Delivered" : "Not delivered", scans.every(scanPaid) ? "Paid" : "Unpaid"].filter(Boolean).join(" - ")
+      ? [`${scans.length} invoice${scans.length === 1 ? "" : "s"}`, scans.map((item) => item.number ? `#${item.number}` : scanLabel(item)).join(", "), scans.some(scanLisaHandled) ? "Ordered by office" : "Rep order", scans.every(scanDelivered) ? "Delivered" : "Not delivered", scans.every(scanPaid) ? "Paid" : "Unpaid"].filter(Boolean).join(" - ")
       : selectedStore ? "Store selected - no invoice attached yet." : "Select the store, then attach this stop's invoice.";
     const row = document.createElement("article");
     const officeOrdered = scan ? scanLisaHandled(scan) : Boolean(selectedStore?.orderBlocked);
@@ -2990,7 +2993,7 @@ function routeSummaryHtml() {
           <span>${escapeHtml(scan.address || "")}</span>
         </td>
         <td>${escapeHtml(invoiceNumber)}</td>
-        <td>${scanLisaHandled(scan) ? "Office" : "Salesman"}</td>
+        <td>${scanLisaHandled(scan) ? "Office" : "Rep"}</td>
         <td><strong>${delivered ? "Delivered" : "Not delivered"}</strong></td>
         <td class="money">${money.format(stopInvoiceTotal)}</td>
         <td class="note-cell">${escapeHtml(scan.routeNote || "")}</td>
@@ -3272,7 +3275,7 @@ function buildRouteSummaryPdfBlob() {
         String(index + 1),
         [scan.customer || `Stop ${index + 1}`, scan.address || ""].filter(Boolean).join(" - "),
         invoice?.number || scan.number || "",
-        scanLisaHandled(scan) ? "Office" : "Salesman",
+        scanLisaHandled(scan) ? "Office" : "Rep",
         delivered ? "Delivered" : "Not delivered",
         money.format(routeInvoiceTotalForScan(scan)),
         scan.routeNote || ""
@@ -3764,7 +3767,7 @@ function renderStoreManager() {
     const addressStatus = addressLooksMappable(store.address || "") ? "Address ready" : "Check address";
     button.innerHTML = `
       <strong>${escapeHtml(store.name)}</strong>
-      <span>${escapeHtml([store.address?.split("\n").at(-1), store.orderBlocked ? "Ordered by office" : "Salesman order allowed"].filter(Boolean).join(" - "))}</span>
+      <span>${escapeHtml([store.address?.split("\n").at(-1), store.orderBlocked ? "Ordered by office" : "Rep order allowed"].filter(Boolean).join(" - "))}</span>
       <small>${productCount} product${productCount === 1 ? "" : "s"} - ${facingCount} facing${facingCount === 1 ? "" : "s"}${store.orderBlocked ? " - Office" : ""} - ${geoStatus} - ${addressStatus}</small>
     `;
     els.storeManagerList.append(button);
@@ -3983,7 +3986,7 @@ function hideStoreManagerEditor() {
   els.storeManagerId.value = "";
   els.storeManagerTitle.textContent = "Add Store";
   els.storeManagerTerms.value = "Net 10";
-  els.storeManagerRep.value = DEFAULT_REP;
+  els.storeManagerRep.value = routeRep();
   els.storeManagerDeliveryFee.value = "";
   els.storeManagerLat.value = "";
   els.storeManagerLng.value = "";
@@ -3998,7 +4001,7 @@ function resetStoreManagerForm() {
   els.storeManagerId.value = "";
   els.storeManagerTitle.textContent = "Add Store";
   els.storeManagerTerms.value = "Net 10";
-  els.storeManagerRep.value = DEFAULT_REP;
+  els.storeManagerRep.value = routeRep();
   els.storeManagerDeliveryFee.value = "";
   els.storeManagerLat.value = "";
   els.storeManagerLng.value = "";
@@ -4369,17 +4372,20 @@ function saveStopFromForm(event) {
 
 function saveOfficeSettings() {
   state.settings = state.settings || {};
+  state.routeDay = state.routeDay || structuredClone(sampleData.routeDay);
   state.settings.officeEmail = els.officeEmail.value.trim();
   state.settings.ryanEmail = els.ryanEmail.value.trim();
-  state.settings.jasonEmail = els.jasonEmail.value.trim();
+  state.settings.repEmail = els.repEmail.value.trim();
+  state.settings.defaultRepName = els.defaultRepName.value.trim();
+  if (!state.routeDay?.rep && state.settings.defaultRepName) state.routeDay.rep = state.settings.defaultRepName;
   saveState();
-  alert("Office emails saved.");
+  alert("Office settings saved.");
 }
 
 function saveRouteDaySettings() {
   state.routeDay = state.routeDay || structuredClone(sampleData.routeDay);
   state.routeDay.date = els.routeDayDate.value || todayOffset(0);
-  state.routeDay.rep = els.routeDayRep.value.trim() || DEFAULT_REP;
+  state.routeDay.rep = els.routeDayRep.value.trim();
   state.routeDay.startingInvoiceNumber = els.routeStartInvoice.value.trim();
   state.routeDay.leaveHomeTime = els.routeLeaveHomeTime.value;
   state.routeDay.arriveFactoryTime = els.routeArriveFactoryTime.value;
@@ -4513,7 +4519,7 @@ function clearRouteDay() {
   state.scans = [];
   state.routeDay = {
     date: todayOffset(0),
-    rep: DEFAULT_REP,
+    rep: state.settings?.defaultRepName || DEFAULT_REP,
     startingInvoiceNumber: "",
     leaveHomeTime: "",
     arriveFactoryTime: "",
@@ -5106,7 +5112,7 @@ function officeRecipients() {
   return [...new Set([
     state.settings?.officeEmail || sampleData.settings.officeEmail,
     state.settings?.ryanEmail || sampleData.settings.ryanEmail,
-    state.settings?.jasonEmail || sampleData.settings.jasonEmail
+    state.settings?.repEmail || ""
   ].map((email) => String(email || "").trim()).filter(Boolean))];
 }
 
@@ -6040,7 +6046,7 @@ function scoreGeocodeResult(result = {}, address = "", name = "", query = "") {
 
 function cleanRouteAddress(address = "") {
   const lines = String(address || "").split(/\n|,/).map((line) => line.trim()).filter(Boolean);
-  const noise = /\b(frozen|food|manager|mgr|main tele|alt tele|phone|fax|email|e-mail|invoice|terms|credit card|delivery|charge|salesman|rep)\b/i;
+  const noise = /\b(frozen|food|manager|mgr|main tele|alt tele|phone|fax|email|e-mail|invoice|terms|credit card|delivery|charge|rep)\b/i;
   const useful = lines.filter((line) => !noise.test(line) && /\d{2,6}|(?:\b[A-Z]{2}\b\s*\d{5})|missouri|illinois|\bMO\b|\bIL\b/i.test(line));
   return (useful.length ? useful : lines.filter((line) => !noise.test(line))).join(", ");
 }

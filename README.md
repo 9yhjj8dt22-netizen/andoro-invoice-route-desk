@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v98 fixes route summary print and PDF buttons.
+Current live app version: v99 removes personal rep defaults and adds rep settings.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 
@@ -12,7 +12,7 @@ A phone-friendly invoice and route planning app for Andoro & Sons.
 - Starts with the stores and available products pulled from the provided Andoro invoices.
 - Shows that store's available products with ordered quantity set to `0` by default.
 - Lets pizza quantities move by full cases: `12`, `24`, `36`, and so on.
-- Defaults new invoices to rep `J.Ballew` unless changed during the order.
+- Lets each rep enter their own name and email.
 - Adds a delivery fee automatically, defaulting to `$10.00` unless changed.
 - Requires a simple access code before opening the form.
 - Blocks invoice creation for Lisa-only stores that already have invoice-numbered sheets.
@@ -20,7 +20,7 @@ A phone-friendly invoice and route planning app for Andoro & Sons.
 - Opens a customer copy that can be printed or saved as a PDF before leaving.
 - Captures the customer's digital signature on the invoice.
 - Sends a copy of the invoice details to Lisa and Ryan at the office.
-- Sends Jason a copy of office emails until his Andoro email is ready.
+- Sends office copies to Lisa, Ryan, and the saved rep email when entered.
 - Keeps saved invoices on the device for resending later.
 
 ## Route Workflow

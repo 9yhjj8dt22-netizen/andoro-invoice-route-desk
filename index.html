@@ -18,7 +18,7 @@
     </style>
     <script>
       (() => {
-        const currentVersion = "98";
+        const currentVersion = "99";
         const params = new URLSearchParams(window.location.search);
         if (params.get("v") && params.get("v") !== currentVersion) {
           params.set("v", currentVersion);
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v98")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v99")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,7 +34,7 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=98">
+    <link rel="stylesheet" href="styles.css?v=99">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
@@ -136,7 +136,7 @@
               </label>
               <label>
                 Rep name
-                <input id="routeDayRep" placeholder="J.Ballew">
+                <input id="routeDayRep" placeholder="Rep name">
               </label>
               <label>
                 Starting invoice #
@@ -613,7 +613,7 @@
               <div class="field-row">
                 <label>
                   Rep
-                  <input id="storeManagerRep" placeholder="J.Ballew">
+                  <input id="storeManagerRep" placeholder="Rep name">
                 </label>
                 <label>
                   D/T
@@ -734,11 +734,15 @@
                 <input id="ryanEmail" inputmode="email" type="email" placeholder="ryan@andoropizza.com">
               </label>
               <label>
-                Jason
-                <input id="jasonEmail" inputmode="email" type="email" placeholder="safetyjason78@gmail.com">
+                Rep email
+                <input id="repEmail" inputmode="email" type="email" placeholder="rep@andoropizza.com">
+              </label>
+              <label>
+                Default rep name
+                <input id="defaultRepName" placeholder="Rep name">
               </label>
               <div class="button-row settings-actions">
-                <button class="primary-button" id="saveOfficeSettings" type="button">Save office emails</button>
+                <button class="primary-button" id="saveOfficeSettings" type="button">Save office settings</button>
               </div>
             </section>
             <section class="work-panel">
@@ -773,9 +777,9 @@
       </div>
     </template>
 
-    <script src="assets/vendor/pdfjs/pdf.min.js?v=98"></script>
-    <script src="assets/vendor/tesseract/tesseract.min.js?v=98"></script>
-    <script src="app.js?v=98"></script>
+    <script src="assets/vendor/pdfjs/pdf.min.js?v=99"></script>
+    <script src="assets/vendor/tesseract/tesseract.min.js?v=99"></script>
+    <script src="app.js?v=99"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
