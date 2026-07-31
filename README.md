@@ -1,6 +1,6 @@
 # Andoro Invoice Route Desk
 
-Current live app version: v99 removes personal rep defaults and adds rep settings.
+Current live app version: v100 updates the app title and AndoroApp backup export filename.
 
 A phone-friendly invoice and route planning app for Andoro & Sons.
 

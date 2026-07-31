@@ -6,10 +6,10 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Andoro & Sons | Invoice Order Form</title>
+    <title>Andoro & Sons | Andoro Invoice / Route App</title>
     <meta name="theme-color" content="#d71920">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-title" content="Invoice Order Form">
+    <meta name="apple-mobile-web-app-title" content="Andoro Invoice / Route App">
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="apple-touch-icon" href="assets/icon-192.png">
     <style>
@@ -26,7 +26,7 @@
         }
         if ("caches" in window) {
           caches.keys().then((keys) => keys
-            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v99")
+            .filter((key) => key.startsWith("andoro-invoice-route-desk-") && key !== "andoro-invoice-route-desk-v100")
             .forEach((key) => caches.delete(key)));
         }
         if ("serviceWorker" in navigator) {
@@ -34,13 +34,13 @@
         }
       })();
     </script>
-    <link rel="stylesheet" href="styles.css?v=99">
+    <link rel="stylesheet" href="styles.css?v=100">
   </head>
   <body class="access-locked">
     <section class="access-screen" id="accessScreen" aria-label="Access code">
       <form class="access-card" id="accessForm">
         <img src="assets/andoro-pizza-logo.jpg" alt="Andoro & Sons Pizza logo">
-        <h1>Invoice Order Form</h1>
+        <h1>Andoro Invoice / Route App</h1>
         <label>
           Access code
           <input id="accessCode" autocomplete="off" inputmode="text" type="password" required>
@@ -54,7 +54,7 @@
         <div class="brand">
           <img class="brand-logo" src="assets/andoro-pizza-logo.jpg" alt="Andoro & Sons Pizza logo">
           <div>
-            <span>Invoice Order Form</span>
+            <span>Andoro Invoice / Route App</span>
           </div>
         </div>
         <nav class="nav-tabs" aria-label="Main views">
@@ -749,7 +749,7 @@
               <div class="panel-heading">
                 <h2>Backup</h2>
               </div>
-              <p class="muted">Export a JSON backup before changing browsers or computers.</p>
+              <p class="muted">Export an AndoroApp backup before changing browsers or computers.</p>
               <div class="button-row">
                 <button class="primary-button" id="exportData" type="button">Export data</button>
                 <label class="file-button">
@@ -777,9 +777,9 @@
       </div>
     </template>
 
-    <script src="assets/vendor/pdfjs/pdf.min.js?v=99"></script>
-    <script src="assets/vendor/tesseract/tesseract.min.js?v=99"></script>
-    <script src="app.js?v=99"></script>
+    <script src="assets/vendor/pdfjs/pdf.min.js?v=100"></script>
+    <script src="assets/vendor/tesseract/tesseract.min.js?v=100"></script>
+    <script src="app.js?v=100"></script>
     <script>
       if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("service-worker.js");
